@@ -1,0 +1,9 @@
+product_id,product_name,category,price,cost,margin
+PROD001,Enterprise Analytics Suite,software,25000,8000,0.68
+PROD002,Business Intelligence Pro,software,12000,4000,0.67
+PROD003,Starter Analytics Pack,software,5000,2000,0.60
+PROD004,Data Integration Module,addon,8000,3000,0.63
+PROD005,Custom Reporting Engine,service,15000,6000,0.60
+PROD006,Training & Onboarding,service,3000,1500,0.50
+PROD007,Annual Support Plan,support,5000,1200,0.76
+PROD008,API Access Premium,software,10000,3500,0.65

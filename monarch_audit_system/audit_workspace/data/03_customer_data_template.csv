@@ -1,0 +1,16 @@
+customer_id,first_purchase_date,last_purchase_date,total_orders,total_revenue,segment,location
+CUST001,2023-06-15,2024-03-05,5,45000,enterprise,Mumbai
+CUST002,2023-08-20,2024-01-18,3,28500,mid_market,Delhi
+CUST003,2024-01-20,2024-01-20,1,22000,enterprise,Bangalore
+CUST004,2024-01-22,2024-01-22,1,5000,smb,Chennai
+CUST005,2023-05-10,2024-04-01,8,92000,enterprise,Mumbai
+CUST006,2023-11-15,2024-02-05,2,33000,mid_market,Pune
+CUST007,2023-09-01,2024-02-10,4,38000,mid_market,Hyderabad
+CUST008,2024-02-14,2024-02-14,1,6500,smb,Kolkata
+CUST009,2023-07-20,2024-02-20,6,75000,enterprise,Mumbai
+CUST010,2023-12-01,2024-03-01,3,28000,mid_market,Delhi
+CUST011,2024-03-10,2024-03-10,1,19000,mid_market,Bangalore
+CUST012,2024-03-15,2024-03-15,1,4500,smb,Chennai
+CUST013,2023-10-05,2024-03-20,4,42000,mid_market,Pune
+CUST014,2023-04-15,2024-01-10,9,115000,enterprise,Mumbai
+CUST015,2023-08-08,2024-02-28,5,58000,enterprise,Delhi

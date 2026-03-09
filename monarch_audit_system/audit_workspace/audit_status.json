@@ -1,0 +1,112 @@
+{
+  "created_at": "2026-03-08T12:09:28.521982",
+  "last_updated": "2026-03-08T12:09:28.528501",
+  "overall_progress_pct": 58.8,
+  "phases": {
+    "day_1": {
+      "label": "Day 1 \u2014 Discovery",
+      "tasks": {
+        "d1_t1": {
+          "name": "Founder / Stakeholder Interview Completed",
+          "status": "pending",
+          "completed_at": null
+        },
+        "d1_t2": {
+          "name": "Data Sources Identified",
+          "status": "pending",
+          "completed_at": null
+        },
+        "d1_t3": {
+          "name": "Data Access Obtained",
+          "status": "pending",
+          "completed_at": null
+        },
+        "d1_t4": {
+          "name": "Client Data Intake Folder Sent",
+          "status": "pending",
+          "completed_at": null
+        }
+      }
+    },
+    "day_2_3": {
+      "label": "Days 2\u20133 \u2014 Data Processing",
+      "tasks": {
+        "d2_t1": {
+          "name": "Datasets Consolidated into Workspace",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.522014"
+        },
+        "d2_t2": {
+          "name": "Data Validation Passed",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.522705"
+        },
+        "d2_t3": {
+          "name": "Data Cleaned and Normalized",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.523489"
+        },
+        "d2_t4": {
+          "name": "Analysis Scripts Executed",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.524235"
+        },
+        "d2_t5": {
+          "name": "Visualizations Generated",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.525012"
+        }
+      }
+    },
+    "day_4_5": {
+      "label": "Days 4\u20135 \u2014 Analysis",
+      "tasks": {
+        "d4_t1": {
+          "name": "KPI Calculations Completed",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.525746"
+        },
+        "d4_t2": {
+          "name": "Revenue Leak Detection Run",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.526420"
+        },
+        "d4_t3": {
+          "name": "Opportunity Areas Identified",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.527090"
+        },
+        "d4_t4": {
+          "name": "Dashboard Generated",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.527687"
+        }
+      }
+    },
+    "day_6_7": {
+      "label": "Days 6\u20137 \u2014 Delivery",
+      "tasks": {
+        "d6_t1": {
+          "name": "Report Generated (PowerPoint)",
+          "status": "completed",
+          "completed_at": "2026-03-08T12:09:28.528435"
+        },
+        "d6_t2": {
+          "name": "Report Reviewed Internally",
+          "status": "pending",
+          "completed_at": null
+        },
+        "d6_t3": {
+          "name": "Leadership Presentation Prepared",
+          "status": "pending",
+          "completed_at": null
+        },
+        "d6_t4": {
+          "name": "Audit Delivered to Client",
+          "status": "pending",
+          "completed_at": null
+        }
+      }
+    }
+  }
+}

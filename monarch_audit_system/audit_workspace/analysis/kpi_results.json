@@ -1,0 +1,42 @@
+{
+  "calculated_at": "2026-03-08T12:09:28.512294",
+  "sales": {
+    "lead_conversion_rate": 0.7333,
+    "opportunity_conversion_rate": 0.7333,
+    "average_deal_value": 14000.0,
+    "sales_cycle_length_days": 12.9,
+    "pipeline_velocity": 11929.58,
+    "total_deals_won": 11,
+    "total_revenue": 154000.0,
+    "win_rate": 0.7333
+  },
+  "marketing": {
+    "customer_acquisition_cost": 17920.0,
+    "return_on_ad_spend": 7.94,
+    "channel_conversion_rate": 0.0169,
+    "funnel_dropoff_rate": 0.9831,
+    "total_marketing_spend": 268800.0,
+    "marketing_revenue_generated": 2134200.0,
+    "cost_per_click": 3.15,
+    "total_conversions": 1442
+  },
+  "financial": {
+    "gross_margin": 0.6362,
+    "contribution_margin": 0.1967,
+    "unit_economics_revenue_per_customer": 40766.67,
+    "cost_per_acquisition": 17920.0,
+    "avg_product_price": 10375.0,
+    "avg_product_cost": 3650.0
+  },
+  "customer": {
+    "customer_lifetime_value": 81461.33,
+    "churn_rate": 1.0,
+    "retention_rate": 0.0,
+    "repeat_purchase_rate": 0.6667,
+    "average_order_value": 11314.07,
+    "average_orders_per_customer": 3.6,
+    "total_customers": 15,
+    "active_customers": 0,
+    "churned_customers": 15
+  }
+}

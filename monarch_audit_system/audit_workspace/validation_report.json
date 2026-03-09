@@ -1,0 +1,164 @@
+{
+  "audit_id": "VAL-20260308-120923",
+  "validated_at": "2026-03-08T12:09:23.822009",
+  "overall_passed": true,
+  "files": {
+    "01_sales_data_template.csv": {
+      "checks": [
+        {
+          "check": "file_exists",
+          "passed": true,
+          "detail": "Found: client_data_intake/01_sales_data_template.csv"
+        },
+        {
+          "check": "column_structure",
+          "passed": true,
+          "detail": "All required columns present."
+        },
+        {
+          "check": "missing_values",
+          "passed": false,
+          "detail": "Missing values found: {'close_date': 2}",
+          "missing_counts": {
+            "close_date": 2
+          }
+        },
+        {
+          "check": "date_format",
+          "passed": true,
+          "detail": "All dates are YYYY-MM-DD."
+        },
+        {
+          "check": "numeric_columns",
+          "passed": true,
+          "detail": "All numeric columns are valid."
+        }
+      ],
+      "row_count": 15,
+      "passed": true
+    },
+    "02_marketing_spend_template.csv": {
+      "checks": [
+        {
+          "check": "file_exists",
+          "passed": true,
+          "detail": "Found: client_data_intake/02_marketing_spend_template.csv"
+        },
+        {
+          "check": "column_structure",
+          "passed": true,
+          "detail": "All required columns present."
+        },
+        {
+          "check": "missing_values",
+          "passed": true,
+          "detail": "No critical missing values.",
+          "missing_counts": {}
+        },
+        {
+          "check": "date_format",
+          "passed": true,
+          "detail": "All dates are YYYY-MM-DD."
+        },
+        {
+          "check": "numeric_columns",
+          "passed": true,
+          "detail": "All numeric columns are valid."
+        }
+      ],
+      "row_count": 15,
+      "passed": true
+    },
+    "03_customer_data_template.csv": {
+      "checks": [
+        {
+          "check": "file_exists",
+          "passed": true,
+          "detail": "Found: client_data_intake/03_customer_data_template.csv"
+        },
+        {
+          "check": "column_structure",
+          "passed": true,
+          "detail": "All required columns present."
+        },
+        {
+          "check": "missing_values",
+          "passed": true,
+          "detail": "No critical missing values.",
+          "missing_counts": {}
+        },
+        {
+          "check": "date_format",
+          "passed": true,
+          "detail": "All dates are YYYY-MM-DD."
+        },
+        {
+          "check": "numeric_columns",
+          "passed": true,
+          "detail": "All numeric columns are valid."
+        }
+      ],
+      "row_count": 15,
+      "passed": true
+    },
+    "04_product_catalog_template.csv": {
+      "checks": [
+        {
+          "check": "file_exists",
+          "passed": true,
+          "detail": "Found: client_data_intake/04_product_catalog_template.csv"
+        },
+        {
+          "check": "column_structure",
+          "passed": true,
+          "detail": "All required columns present."
+        },
+        {
+          "check": "missing_values",
+          "passed": true,
+          "detail": "No critical missing values.",
+          "missing_counts": {}
+        },
+        {
+          "check": "numeric_columns",
+          "passed": true,
+          "detail": "All numeric columns are valid."
+        }
+      ],
+      "row_count": 8,
+      "passed": true
+    },
+    "05_operational_metrics_template.csv": {
+      "checks": [
+        {
+          "check": "file_exists",
+          "passed": true,
+          "detail": "Found: client_data_intake/05_operational_metrics_template.csv"
+        },
+        {
+          "check": "column_structure",
+          "passed": true,
+          "detail": "All required columns present."
+        },
+        {
+          "check": "missing_values",
+          "passed": true,
+          "detail": "No critical missing values.",
+          "missing_counts": {}
+        },
+        {
+          "check": "date_format",
+          "passed": true,
+          "detail": "All dates are YYYY-MM-DD."
+        },
+        {
+          "check": "numeric_columns",
+          "passed": true,
+          "detail": "All numeric columns are valid."
+        }
+      ],
+      "row_count": 21,
+      "passed": true
+    }
+  }
+}

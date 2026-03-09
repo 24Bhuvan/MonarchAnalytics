@@ -1,0 +1,2921 @@
+
+
+===== FILE: ./analysis/customer_analysis.py =====
+
+"""
+customer_analysis.py
+============                                                            ========
+Monarch Analytics — Customer Behaviour & LTV Analysis
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+CLEAN_DIR = "audit_workspace/cleaned_data"
+VIZ_DIR = "audit_workspace/visualizations"
+
+
+def load_data():
+    df = pd.read_csv(os.path.join(CLEAN_DIR, "customers_clean.csv"),
+                     parse_dates=["first_purchase_date", "last_purchase_date"])
+    return df
+
+
+def compute_metrics(df: pd.DataFrame) -> dict:
+    """Compute all customer health metrics."""
+    total = len(df)
+    churned = df["is_churned"].sum()
+    retention_rate = 1 - (churned / total) if total else 0
+    churn_rate = churned / total if total else 0
+    repeat_buyers = df[df["total_orders"] > 1]
+    repeat_purchase_rate = len(repeat_buyers) / total if total else 0
+
+    avg_order_value = df["avg_order_value"].mean()
+    avg_orders = df["total_orders"].mean()
+    retention_period = 2.0  # years
+    ltv = avg_order_value * avg_orders * retention_period
+
+    return {
+        "total_customers": total,
+        "churned_customers": int(churned),
+        "active_customers": int(total - churned),
+        "retention_rate": round(retention_rate, 4),
+        "churn_rate": round(churn_rate, 4),
+        "repeat_purchase_rate": round(repeat_purchase_rate, 4),
+        "average_order_value": round(avg_order_value, 2),
+        "average_orders_per_customer": round(avg_orders, 2),
+        "customer_lifetime_value": round(ltv, 2),
+        "retention_period_years": retention_period,
+    }
+
+
+def plot_ltv_distribution(df: pd.DataFrame):
+    """Histogram of customer total revenue (LTV proxy)."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+    fig.patch.set_facecolor("#0D1B2A")
+    ax.set_facecolor("#0D1B2A")
+
+    ax.hist(df["total_revenue"], bins=15, color="#2E86AB", edgecolor="white", linewidth=0.5, alpha=0.85)
+    ax.axvline(df["total_revenue"].mean(), color="#F4A261", linestyle="--", linewidth=2,
+               label=f"Mean: ₹{df['total_revenue'].mean():,.0f}")
+    ax.axvline(df["total_revenue"].median(), color="#2ECC71", linestyle="--", linewidth=2,
+               label=f"Median: ₹{df['total_revenue'].median():,.0f}")
+
+    ax.set_title("Customer Lifetime Value Distribution", color="white", fontsize=14, fontweight="bold")
+    ax.set_xlabel("Total Revenue per Customer (₹)", color="white")
+    ax.set_ylabel("Number of Customers", color="white")
+    ax.tick_params(colors="white")
+    ax.spines[:].set_color("#1B4F72")
+    ax.legend(facecolor="#1B4F72", labelcolor="white")
+
+    plt.tight_layout()
+    out = os.path.join(VIZ_DIR, "ltv_distribution.png")
+    plt.savefig(out, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print("   📊 Saved: ltv_distribution.png")
+
+
+def plot_segment_revenue(df: pd.DataFrame):
+    """Revenue breakdown by customer segment."""
+    seg = df.groupby("segment")["total_revenue"].sum().sort_values(ascending=False).reset_index()
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    fig.patch.set_facecolor("#0D1B2A")
+
+    seg_colors = {"enterprise": "#2ECC71", "mid_market": "#F4A261", "smb": "#E63946"}
+    colors = [seg_colors.get(s, "#A8DADC") for s in seg["segment"]]
+
+    # Bar chart
+    ax1 = axes[0]
+    ax1.set_facecolor("#0D1B2A")
+    bars = ax1.bar(seg["segment"], seg["total_revenue"], color=colors, edgecolor="white", linewidth=0.5)
+    for bar, val in zip(bars, seg["total_revenue"]):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(seg["total_revenue"])*0.02,
+                 f"₹{val:,.0f}", ha="center", va="bottom", color="white", fontsize=10, fontweight="bold")
+    ax1.set_title("Revenue by Customer Segment", color="white", fontsize=13, fontweight="bold")
+    ax1.set_ylabel("Total Revenue (₹)", color="white")
+    ax1.tick_params(colors="white")
+    ax1.spines[:].set_color("#1B4F72")
+
+    # Pie chart
+    ax2 = axes[1]
+    ax2.set_facecolor("#0D1B2A")
+    wedges, texts, autotexts = ax2.pie(seg["total_revenue"], labels=seg["segment"],
+                                        colors=colors, autopct="%1.1f%%", startangle=90,
+                                        textprops={"color": "white"})
+    for at in autotexts:
+        at.set_color("white")
+        at.set_fontweight("bold")
+    ax2.set_title("Revenue Share by Segment", color="white", fontsize=13, fontweight="bold")
+
+    plt.tight_layout()
+    out = os.path.join(VIZ_DIR, "customer_cohort_retention.png")
+    plt.savefig(out, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print("   📊 Saved: customer_cohort_retention.png")
+
+
+def run():
+    print("\n👥 Running Customer Analysis...")
+    os.makedirs(VIZ_DIR, exist_ok=True)
+    df = load_data()
+    metrics = compute_metrics(df)
+    plot_ltv_distribution(df)
+    plot_segment_revenue(df)
+    print(f"   ✅ Customer analysis complete. LTV: ₹{metrics['customer_lifetime_value']:,.0f}, Retention: {metrics['retention_rate']*100:.1f}%")
+    return metrics
+
+
+if __name__ == "__main__":
+    run()
+
+
+===== FILE: ./analysis/marketing_analysis.py =====
+
+"""
+marketing_analysis.py
+=====================
+Monarch Analytics — Marketing Efficiency Analysis
+
+Computes CAC, ROAS, conversion rates and generates channel comparison charts.
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+CLEAN_DIR = "audit_workspace/cleaned_data"
+VIZ_DIR = "audit_workspace/visualizations"
+ANALYSIS_DIR = "audit_workspace/analysis"
+
+CHANNEL_COLORS = {"google_ads": "#4285F4", "facebook": "#1877F2",
+                  "linkedin": "#0A66C2", "email": "#F4A261", "other": "#A8DADC"}
+
+
+def load_data():
+    df_mkt = pd.read_csv(os.path.join(CLEAN_DIR, "marketing_clean.csv"), parse_dates=["date"])
+    df_cust = pd.read_csv(os.path.join(CLEAN_DIR, "customers_clean.csv"))
+    return df_mkt, df_cust
+
+
+def compute_metrics(df_mkt: pd.DataFrame, df_cust: pd.DataFrame) -> dict:
+    """Calculate marketing efficiency metrics."""
+    total_spend = df_mkt["spend"].sum()
+    total_revenue = df_mkt["revenue_generated"].sum()
+    total_conversions = df_mkt["conversions"].sum()
+    total_customers = len(df_cust)
+
+    cac = total_spend / total_customers if total_customers else 0
+    roas = total_revenue / total_spend if total_spend else 0
+    conversion_rate = df_mkt["conversion_rate"].mean()
+
+    avg_order = df_cust["avg_order_value"].mean()
+    avg_orders = df_cust["total_orders"].mean()
+    retention_period = 2.0  # Assumed years
+    avg_ltv = avg_order * avg_orders * retention_period
+
+    # By channel
+    by_channel = df_mkt.groupby("channel").agg(
+        spend=("spend", "sum"),
+        conversions=("conversions", "sum"),
+        revenue=("revenue_generated", "sum"),
+        clicks=("clicks", "sum"),
+    ).reset_index()
+    by_channel["roas"] = (by_channel["revenue"] / by_channel["spend"].replace(0, np.nan)).round(2)
+    by_channel["cpc"] = (by_channel["spend"] / by_channel["clicks"].replace(0, np.nan)).round(2)
+    by_channel["conv_rate"] = (by_channel["conversions"] / by_channel["clicks"].replace(0, np.nan)).round(4)
+    by_channel["cac_est"] = (by_channel["spend"] / by_channel["conversions"].replace(0, np.nan)).round(2)
+
+    return {
+        "total_spend": round(total_spend, 2),
+        "total_revenue_generated": round(total_revenue, 2),
+        "total_conversions": int(total_conversions),
+        "overall_cac": round(cac, 2),
+        "overall_roas": round(roas, 2),
+        "average_conversion_rate": round(conversion_rate, 4),
+        "estimated_ltv": round(avg_ltv, 2),
+        "ltv_to_cac_ratio": round(avg_ltv / cac, 2) if cac else 0,
+        "by_channel": by_channel.to_dict(orient="records"),
+    }
+
+
+def plot_channel_performance(df_mkt: pd.DataFrame):
+    """Bar chart: ROAS and spend by channel."""
+    by_ch = df_mkt.groupby("channel").agg(
+        spend=("spend", "sum"),
+        revenue=("revenue_generated", "sum")
+    ).reset_index()
+    by_ch["roas"] = (by_ch["revenue"] / by_ch["spend"]).round(2)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig.patch.set_facecolor("#0D1B2A")
+
+    colors = [CHANNEL_COLORS.get(ch, "#A8DADC") for ch in by_ch["channel"]]
+
+    # Spend by channel
+    ax1 = axes[0]
+    ax1.set_facecolor("#0D1B2A")
+    bars = ax1.bar(by_ch["channel"], by_ch["spend"], color=colors, edgecolor="white", linewidth=0.5)
+    ax1.set_title("Marketing Spend by Channel", color="white", fontsize=13, fontweight="bold")
+    ax1.set_ylabel("Spend (₹)", color="white")
+    ax1.tick_params(colors="white", axis="both")
+    ax1.spines[:].set_color("#1B4F72")
+    for bar, val in zip(bars, by_ch["spend"]):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(by_ch["spend"])*0.01,
+                 f"₹{val:,.0f}", ha="center", va="bottom", color="white", fontsize=9)
+
+    # ROAS by channel
+    ax2 = axes[1]
+    ax2.set_facecolor("#0D1B2A")
+    bars2 = ax2.bar(by_ch["channel"], by_ch["roas"], color=colors, edgecolor="white", linewidth=0.5)
+    ax2.axhline(y=2.0, color="#E63946", linestyle="--", linewidth=1.5, label="ROAS Target (2x)")
+    ax2.set_title("ROAS by Channel", color="white", fontsize=13, fontweight="bold")
+    ax2.set_ylabel("ROAS", color="white")
+    ax2.tick_params(colors="white", axis="both")
+    ax2.spines[:].set_color("#1B4F72")
+    ax2.legend(facecolor="#1B4F72", labelcolor="white", fontsize=9)
+    for bar, val in zip(bars2, by_ch["roas"]):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.05,
+                 f"{val:.1f}x", ha="center", va="bottom", color="white", fontsize=9)
+
+    plt.tight_layout()
+    out_path = os.path.join(VIZ_DIR, "channel_performance.png")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print("   📊 Saved: channel_performance.png")
+
+
+def plot_cac_vs_ltv(metrics: dict):
+    """CAC vs LTV comparison chart."""
+    cac = metrics["overall_cac"]
+    ltv = metrics["estimated_ltv"]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    fig.patch.set_facecolor("#0D1B2A")
+    ax.set_facecolor("#0D1B2A")
+
+    categories = ["CAC", "LTV", "LTV:CAC Ratio"]
+    values_plot = [cac, ltv, metrics["ltv_to_cac_ratio"] * 1000]
+    bar_colors = ["#E63946", "#2ECC71", "#F4A261"]
+
+    bars = ax.bar(["Customer Acquisition Cost", "Lifetime Value"], [cac, ltv],
+                  color=["#E63946", "#2ECC71"], edgecolor="white", linewidth=0.5, width=0.4)
+
+    for bar, val in zip(bars, [cac, ltv]):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(cac, ltv)*0.02,
+                f"₹{val:,.0f}", ha="center", va="bottom", color="white", fontsize=13, fontweight="bold")
+
+    ratio_text = f"LTV:CAC Ratio = {metrics['ltv_to_cac_ratio']:.1f}x\n(Target: ≥ 3x)"
+    ax.text(0.98, 0.92, ratio_text, transform=ax.transAxes, ha="right", va="top",
+            color="#A8DADC", fontsize=11, bbox=dict(boxstyle="round,pad=0.4", facecolor="#1B4F72", alpha=0.8))
+
+    ax.set_title("CAC vs Customer Lifetime Value", color="white", fontsize=15, fontweight="bold", pad=15)
+    ax.set_ylabel("Value (₹)", color="white")
+    ax.tick_params(colors="white")
+    ax.spines[:].set_color("#1B4F72")
+
+    plt.tight_layout()
+    out_path = os.path.join(VIZ_DIR, "cac_vs_ltv.png")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print("   📊 Saved: cac_vs_ltv.png")
+
+
+def plot_marketing_funnel(df_mkt: pd.DataFrame):
+    """Marketing conversion funnel."""
+    totals = {
+        "Impressions": df_mkt["impressions"].sum(),
+        "Clicks": df_mkt["clicks"].sum(),
+        "Conversions": df_mkt["conversions"].sum(),
+    }
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.patch.set_facecolor("#0D1B2A")
+    ax.set_facecolor("#0D1B2A")
+
+    stages = list(totals.keys())
+    values = list(totals.values())
+    funnel_colors = ["#2E86AB", "#F4A261", "#2ECC71"]
+
+    bars = ax.barh(stages[::-1], values[::-1], color=funnel_colors, height=0.5,
+                   edgecolor="white", linewidth=0.5)
+
+    for bar, val in zip(bars, values[::-1]):
+        ax.text(bar.get_width() + max(values)*0.005, bar.get_y() + bar.get_height()/2,
+                f"{val:,}", va="center", color="white", fontsize=12, fontweight="bold")
+
+    ctr = totals["Clicks"] / totals["Impressions"] * 100
+    cvr = totals["Conversions"] / totals["Clicks"] * 100
+    ax.text(0.98, 0.08, f"CTR: {ctr:.2f}%  |  CVR: {cvr:.2f}%",
+            transform=ax.transAxes, ha="right", color="#A8DADC", fontsize=11,
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="#1B4F72", alpha=0.8))
+
+    ax.set_title("Marketing Conversion Funnel", color="white", fontsize=15, fontweight="bold", pad=15)
+    ax.tick_params(colors="white", labelsize=11)
+    ax.spines[:].set_color("#1B4F72")
+
+    plt.tight_layout()
+    out_path = os.path.join(VIZ_DIR, "marketing_funnel.png")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print("   📊 Saved: marketing_funnel.png")
+
+
+def run():
+    """Main entry point for marketing analysis."""
+    print("\n📣 Running Marketing Analysis...")
+    os.makedirs(VIZ_DIR, exist_ok=True)
+    df_mkt, df_cust = load_data()
+    metrics = compute_metrics(df_mkt, df_cust)
+    plot_channel_performance(df_mkt)
+    plot_cac_vs_ltv(metrics)
+    plot_marketing_funnel(df_mkt)
+    print(f"   ✅ Marketing analysis complete. ROAS: {metrics['overall_roas']}x, CAC: ₹{metrics['overall_cac']:,.0f}")
+    return metrics
+
+
+if __name__ == "__main__":
+    run()
+
+
+===== FILE: ./analysis/revenue_driver_analysis.py =====
+
+"""
+revenue_driver_analysis.py
+==========================
+Monarch Analytics — Revenue Driver & Pareto Analysis
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+CLEAN_DIR = "audit_workspace/cleaned_data"
+VIZ_DIR = "audit_workspace/visualizations"
+ANALYSIS_DIR = "audit_workspace/analysis"
+
+
+def load_data():
+    sales = pd.read_csv(os.path.join(CLEAN_DIR, "sales_clean.csv"), parse_dates=["date"])
+    customers = pd.read_csv(os.path.join(CLEAN_DIR, "customers_clean.csv"))
+    products = pd.read_csv(os.path.join(CLEAN_DIR, "products_clean.csv"))
+    return sales, customers, products
+
+
+def compute_drivers(sales: pd.DataFrame, customers: pd.DataFrame) -> dict:
+    won = sales[sales["deal_stage"] == "closed_won"]
+
+    top_products = won.groupby("product_id")["revenue"].sum().sort_values(ascending=False)
+    top_channels = won.groupby("channel")["revenue"].sum().sort_values(ascending=False)
+
+    cust_rev = customers.sort_values("total_revenue", ascending=False)
+    top_20pct_idx = max(1, int(len(cust_rev) * 0.2))
+    top_cust_rev = cust_rev.head(top_20pct_idx)["total_revenue"].sum()
+    total_cust_rev = cust_rev["total_revenue"].sum()
+    pareto_pct = (top_cust_rev / total_cust_rev * 100) if total_cust_rev else 0
+
+    return {
+        "top_products": top_products.head(5).to_dict(),
+        "top_channels": top_channels.to_dict(),
+        "pareto_top_20pct_revenue_share": round(pareto_pct, 1),
+        "total_revenue": round(won["revenue"].sum(), 2),
+    }
+
+
+def plot_pareto(customers: pd.DataFrame):
+    """Pareto chart showing top customers driving revenue."""
+    cust_sorted = customers.sort_values("total_revenue", ascending=False).reset_index(drop=True)
+    cust_sorted["cumulative_pct"] = (cust_sorted["total_revenue"].cumsum() /
+                                      cust_sorted["total_revenue"].sum() * 100)
+    cust_sorted["customer_pct"] = (np.arange(1, len(cust_sorted) + 1) / len(cust_sorted) * 100)
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor("#0D1B2A")
+    ax1.set_facecolor("#0D1B2A")
+
+    ax1.bar(cust_sorted.index, cust_sorted["total_revenue"], color="#2E86AB",
+            edgecolor="none", alpha=0.8, label="Revenue per Customer")
+    ax1.set_ylabel("Revenue (₹)", color="#2E86AB")
+    ax1.tick_params(axis="y", colors="#2E86AB")
+    ax1.tick_params(axis="x", colors="white")
+    ax1.spines[:].set_color("#1B4F72")
+
+    ax2 = ax1.twinx()
+    ax2.set_facecolor("#0D1B2A")
+    ax2.plot(cust_sorted.index, cust_sorted["cumulative_pct"], color="#F4A261",
+             linewidth=2.5, label="Cumulative Revenue %")
+    ax2.axhline(y=80, color="#E63946", linestyle="--", linewidth=1.5, alpha=0.7)
+    ax2.set_ylabel("Cumulative Revenue %", color="#F4A261")
+    ax2.tick_params(axis="y", colors="#F4A261")
+    ax2.spines[:].set_color("#1B4F72")
+
+    ax1.set_title("Pareto Revenue Analysis — Top Customers Driving Revenue",
+                  color="white", fontsize=14, fontweight="bold", pad=15)
+    ax1.set_xlabel("Customers (ranked by revenue)", color="white")
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, facecolor="#1B4F72", labelcolor="white", loc="center right")
+
+    plt.tight_layout()
+    out = os.path.join(VIZ_DIR, "pareto_revenue_chart.png")
+    plt.savefig(out, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print("   📊 Saved: pareto_revenue_chart.png")
+
+
+def run():
+    print("\n💰 Running Revenue Driver Analysis...")
+    os.makedirs(VIZ_DIR, exist_ok=True)
+    sales, customers, products = load_data()
+    drivers = compute_drivers(sales, customers)
+    plot_pareto(customers)
+    print(f"   ✅ Revenue driver analysis complete. Top 20% customers = {drivers['pareto_top_20pct_revenue_share']}% of revenue")
+    return drivers
+
+
+if __name__ == "__main__":
+    run()
+
+
+===== FILE: ./analysis/sales_analysis.py =====
+
+"""
+sales_analysis.py
+=================
+Monarch Analytics — Sales Funnel & Performance Analysis
+
+Computes all sales KPIs and generates funnel charts.
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
+
+CLEAN_DIR = "audit_workspace/cleaned_data"
+VIZ_DIR = "audit_workspace/visualizations"
+ANALYSIS_DIR = "audit_workspace/analysis"
+
+# Brand colors
+COLORS = ["#1B4F72", "#2E86AB", "#A8DADC", "#F4A261", "#E63946"]
+
+
+def load_data():
+    """Load cleaned sales data."""
+    path = os.path.join(CLEAN_DIR, "sales_clean.csv")
+    df = pd.read_csv(path, parse_dates=["date", "lead_date", "close_date"])
+    return df
+
+
+def compute_funnel_metrics(df: pd.DataFrame) -> dict:
+    """Calculate key sales funnel conversion metrics."""
+    total_leads = len(df)
+    won = df[df["deal_stage"] == "closed_won"]
+    lost = df[df["deal_stage"] == "closed_lost"]
+    proposals = df[df["deal_stage"].isin(["proposal", "closed_won", "closed_lost"])]
+
+    lead_to_proposal = len(proposals) / total_leads if total_leads else 0
+    proposal_to_win = len(won) / len(proposals) if len(proposals) else 0
+    lead_to_win = len(won) / total_leads if total_leads else 0
+
+    avg_deal_value = won["revenue"].mean() if len(won) else 0
+    avg_cycle = won["sales_cycle_days"].dropna().mean() if len(won) else 0
+
+    total_revenue = won["revenue"].sum()
+    pipeline_velocity = (total_revenue / avg_cycle) if avg_cycle else 0
+
+    metrics = {
+        "total_leads": total_leads,
+        "proposals_sent": len(proposals),
+        "deals_won": len(won),
+        "deals_lost": len(lost),
+        "lead_to_opportunity_conversion": round(lead_to_proposal, 4),
+        "opportunity_to_sale_conversion": round(proposal_to_win, 4),
+        "overall_lead_to_sale_conversion": round(lead_to_win, 4),
+        "average_deal_value": round(avg_deal_value, 2),
+        "average_sales_cycle_days": round(avg_cycle, 1),
+        "pipeline_velocity": round(pipeline_velocity, 2),
+        "total_revenue": round(total_revenue, 2),
+    }
+    return metrics
+
+
+def plot_sales_funnel(metrics: dict):
+    """Generate a visual sales funnel chart."""
+    os.makedirs(VIZ_DIR, exist_ok=True)
+
+    stages = ["Total Leads", "Proposals Sent", "Deals Won"]
+    values = [metrics["total_leads"], metrics["proposals_sent"], metrics["deals_won"]]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.patch.set_facecolor("#0D1B2A")
+    ax.set_facecolor("#0D1B2A")
+
+    bar_colors = ["#2E86AB", "#F4A261", "#2ECC71"]
+    bars = ax.barh(stages[::-1], values[::-1], color=bar_colors, edgecolor="white", linewidth=0.5, height=0.5)
+
+    for bar, val in zip(bars, values[::-1]):
+        ax.text(bar.get_width() + max(values) * 0.01, bar.get_y() + bar.get_height() / 2,
+                f"{val}", va="center", ha="left", color="white", fontsize=12, fontweight="bold")
+
+    ax.set_title("Sales Funnel Analysis", color="white", fontsize=16, fontweight="bold", pad=15)
+    ax.set_xlabel("Count", color="white", fontsize=11)
+    ax.tick_params(colors="white", labelsize=11)
+    ax.spines[:].set_color("#1B4F72")
+    ax.xaxis.label.set_color("white")
+
+    # Conversion rate annotations
+    conv_text = (
+        f"Lead → Proposal: {metrics['lead_to_opportunity_conversion']*100:.1f}%\n"
+        f"Proposal → Win: {metrics['opportunity_to_sale_conversion']*100:.1f}%\n"
+        f"Overall Conversion: {metrics['overall_lead_to_sale_conversion']*100:.1f}%"
+    )
+    ax.text(0.98, 0.05, conv_text, transform=ax.transAxes, ha="right", va="bottom",
+            color="#A8DADC", fontsize=10, bbox=dict(boxstyle="round,pad=0.4", facecolor="#1B4F72", alpha=0.8))
+
+    plt.tight_layout()
+    out_path = os.path.join(VIZ_DIR, "sales_funnel_chart.png")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print(f"   📊 Saved: sales_funnel_chart.png")
+
+
+def plot_revenue_trend(df: pd.DataFrame):
+    """Generate monthly revenue trend chart."""
+    won = df[df["deal_stage"] == "closed_won"].copy()
+    monthly = won.groupby("month")["revenue"].sum().reset_index()
+    monthly = monthly.sort_values("month")
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    fig.patch.set_facecolor("#0D1B2A")
+    ax.set_facecolor("#0D1B2A")
+
+    ax.plot(monthly["month"], monthly["revenue"], color="#F4A261", linewidth=2.5, marker="o",
+            markersize=8, markerfacecolor="#E63946")
+    ax.fill_between(range(len(monthly)), monthly["revenue"], alpha=0.15, color="#F4A261")
+
+    ax.set_xticks(range(len(monthly)))
+    ax.set_xticklabels(monthly["month"], rotation=30, ha="right", color="white")
+    ax.set_title("Monthly Revenue Trend", color="white", fontsize=16, fontweight="bold", pad=15)
+    ax.set_ylabel("Revenue (₹)", color="white")
+    ax.tick_params(colors="white")
+    ax.spines[:].set_color("#1B4F72")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"₹{x:,.0f}"))
+
+    plt.tight_layout()
+    out_path = os.path.join(VIZ_DIR, "revenue_trend.png")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close()
+    print(f"   📊 Saved: revenue_trend.png")
+
+
+def save_conversion_table(metrics: dict):
+    """Export conversion metrics to CSV."""
+    os.makedirs(ANALYSIS_DIR, exist_ok=True)
+    rows = [
+        {"metric": "Total Leads", "value": metrics["total_leads"], "unit": "count"},
+        {"metric": "Proposals Sent", "value": metrics["proposals_sent"], "unit": "count"},
+        {"metric": "Deals Won", "value": metrics["deals_won"], "unit": "count"},
+        {"metric": "Lead to Opportunity Conversion", "value": f"{metrics['lead_to_opportunity_conversion']*100:.1f}%", "unit": "rate"},
+        {"metric": "Opportunity to Sale Conversion", "value": f"{metrics['opportunity_to_sale_conversion']*100:.1f}%", "unit": "rate"},
+        {"metric": "Overall Lead to Sale Conversion", "value": f"{metrics['overall_lead_to_sale_conversion']*100:.1f}%", "unit": "rate"},
+        {"metric": "Average Deal Value", "value": f"₹{metrics['average_deal_value']:,.0f}", "unit": "currency"},
+        {"metric": "Average Sales Cycle", "value": f"{metrics['average_sales_cycle_days']} days", "unit": "days"},
+        {"metric": "Pipeline Velocity", "value": f"₹{metrics['pipeline_velocity']:,.0f}/day", "unit": "currency/day"},
+        {"metric": "Total Revenue", "value": f"₹{metrics['total_revenue']:,.0f}", "unit": "currency"},
+    ]
+    pd.DataFrame(rows).to_csv(os.path.join(ANALYSIS_DIR, "conversion_table.csv"), index=False)
+    print(f"   📋 Saved: conversion_table.csv")
+
+
+def run():
+    """Main entry point for sales analysis."""
+    print("\n🔍 Running Sales Analysis...")
+    df = load_data()
+    metrics = compute_funnel_metrics(df)
+    plot_sales_funnel(metrics)
+    plot_revenue_trend(df)
+    save_conversion_table(metrics)
+    print(f"   ✅ Sales analysis complete. Deals won: {metrics['deals_won']}, Revenue: ₹{metrics['total_revenue']:,.0f}")
+    return metrics
+
+
+if __name__ == "__main__":
+    run()
+
+
+===== FILE: ./analysis/__init__.py =====
+
+# Monarch Analytics — Analysis Package
+
+
+===== FILE: ./audit_workflow.py =====
+
+"""
+audit_workflow.py
+=================
+Monarch Analytics — Audit Checklist & Workflow Manager
+
+Tracks the lifecycle of each audit through
+daily checkpoints and saves progress to audit_status.json.
+"""
+
+import os
+import json
+from datetime import datetime
+
+STATUS_FILE = "audit_workspace/audit_status.json"
+
+CHECKLIST = {
+    "day_1": {
+        "label": "Day 1 — Discovery",
+        "tasks": [
+            {"id": "d1_t1", "name": "Founder / Stakeholder Interview Completed"},
+            {"id": "d1_t2", "name": "Data Sources Identified"},
+            {"id": "d1_t3", "name": "Data Access Obtained"},
+            {"id": "d1_t4", "name": "Client Data Intake Folder Sent"},
+        ]
+    },
+    "day_2_3": {
+        "label": "Days 2–3 — Data Processing",
+        "tasks": [
+            {"id": "d2_t1", "name": "Datasets Consolidated into Workspace"},
+            {"id": "d2_t2", "name": "Data Validation Passed"},
+            {"id": "d2_t3", "name": "Data Cleaned and Normalized"},
+            {"id": "d2_t4", "name": "Analysis Scripts Executed"},
+            {"id": "d2_t5", "name": "Visualizations Generated"},
+        ]
+    },
+    "day_4_5": {
+        "label": "Days 4–5 — Analysis",
+        "tasks": [
+            {"id": "d4_t1", "name": "KPI Calculations Completed"},
+            {"id": "d4_t2", "name": "Revenue Leak Detection Run"},
+            {"id": "d4_t3", "name": "Opportunity Areas Identified"},
+            {"id": "d4_t4", "name": "Dashboard Generated"},
+        ]
+    },
+    "day_6_7": {
+        "label": "Days 6–7 — Delivery",
+        "tasks": [
+            {"id": "d6_t1", "name": "Report Generated (PowerPoint)"},
+            {"id": "d6_t2", "name": "Report Reviewed Internally"},
+            {"id": "d6_t3", "name": "Leadership Presentation Prepared"},
+            {"id": "d6_t4", "name": "Audit Delivered to Client"},
+        ]
+    }
+}
+
+
+def load_status() -> dict:
+    """Load existing status or initialize fresh."""
+    if os.path.isfile(STATUS_FILE):
+        with open(STATUS_FILE) as f:
+            return json.load(f)
+    return init_status()
+
+
+def init_status() -> dict:
+    """Create a fresh audit status file."""
+    status = {
+        "created_at": datetime.now().isoformat(),
+        "last_updated": datetime.now().isoformat(),
+        "overall_progress_pct": 0,
+        "phases": {}
+    }
+    for phase_key, phase in CHECKLIST.items():
+        status["phases"][phase_key] = {
+            "label": phase["label"],
+            "tasks": {
+                t["id"]: {"name": t["name"], "status": "pending", "completed_at": None}
+                for t in phase["tasks"]
+            }
+        }
+    return status
+
+
+def save_status(status: dict):
+    """Persist status to JSON file."""
+    os.makedirs("audit_workspace", exist_ok=True)
+    status["last_updated"] = datetime.now().isoformat()
+    total_tasks = sum(len(p["tasks"]) for p in status["phases"].values())
+    done_tasks = sum(
+        1 for p in status["phases"].values()
+        for t in p["tasks"].values() if t["status"] == "completed"
+    )
+    status["overall_progress_pct"] = round(done_tasks / total_tasks * 100, 1) if total_tasks else 0
+    with open(STATUS_FILE, "w") as f:
+        json.dump(status, f, indent=2)
+
+
+def mark_complete(task_id: str):
+    """Mark a specific task as completed."""
+    status = load_status()
+    for phase in status["phases"].values():
+        if task_id in phase["tasks"]:
+            phase["tasks"][task_id]["status"] = "completed"
+            phase["tasks"][task_id]["completed_at"] = datetime.now().isoformat()
+            save_status(status)
+            print(f"   ✅ Task completed: {phase['tasks'][task_id]['name']}")
+            return
+    print(f"   ⚠️  Task ID not found: {task_id}")
+
+
+def auto_complete_pipeline_tasks():
+    """Automatically mark all pipeline execution tasks as complete."""
+    pipeline_tasks = ["d2_t1", "d2_t2", "d2_t3", "d2_t4", "d2_t5",
+                      "d4_t1", "d4_t2", "d4_t3", "d4_t4", "d6_t1"]
+    for tid in pipeline_tasks:
+        mark_complete(tid)
+
+
+def print_status():
+    """Print a readable checklist to console."""
+    status = load_status()
+    print("\n" + "="*60)
+    print("  MONARCH ANALYTICS — AUDIT CHECKLIST")
+    print(f"  Progress: {status['overall_progress_pct']}%")
+    print("="*60)
+    for phase_data in status["phases"].values():
+        print(f"\n  📅 {phase_data['label']}")
+        for task in phase_data["tasks"].values():
+            icon = "✅" if task["status"] == "completed" else "☐ "
+            completed = f" [{task['completed_at'][:10]}]" if task["completed_at"] else ""
+            print(f"     {icon}  {task['name']}{completed}")
+    print("\n" + "="*60 + "\n")
+
+
+if __name__ == "__main__":
+    status = load_status()
+    save_status(status)
+    print_status()
+
+
+===== FILE: ./dashboard_app.py =====
+
+"""
+dashboard_app.py
+================
+Monarch Analytics — Interactive Plotly Dash Dashboard
+
+Run with: python dashboard_app.py
+Then open: http://localhost:8050
+"""
+
+import os
+import json
+import pandas as pd
+import numpy as np
+
+try:
+    import dash
+    from dash import dcc, html, Input, Output
+    import plotly.graph_objects as go
+    import plotly.express as px
+    DASH_AVAILABLE = True
+except ImportError:
+    DASH_AVAILABLE = False
+
+CLEAN_DIR = "audit_workspace/cleaned_data"
+ANALYSIS_DIR = "audit_workspace/analysis"
+
+# ── Brand Theme ───────────────────────────────────────────────────────────────
+COLORS = {
+    "bg": "#0D1B2A", "card": "#1B4F72", "border": "#2E86AB",
+    "text": "#FFFFFF", "accent": "#F4A261", "green": "#2ECC71",
+    "red": "#E63946", "light": "#A8DADC"
+}
+
+LAYOUT = dict(
+    paper_bgcolor=COLORS["bg"], plot_bgcolor=COLORS["bg"],
+    font=dict(color=COLORS["text"], family="Calibri"),
+    margin=dict(l=40, r=40, t=50, b=40),
+)
+
+
+def load_data():
+    """Load all cleaned datasets and KPI results."""
+    data = {}
+    files = {
+        "sales": "sales_clean.csv", "marketing": "marketing_clean.csv",
+        "customers": "customers_clean.csv", "products": "products_clean.csv",
+    }
+    for key, fname in files.items():
+        path = os.path.join(CLEAN_DIR, fname)
+        if os.path.isfile(path):
+            data[key] = pd.read_csv(path)
+
+    kpi_path = os.path.join(ANALYSIS_DIR, "kpi_results.json")
+    data["kpis"] = json.load(open(kpi_path)) if os.path.isfile(kpi_path) else {}
+
+    leak_path = os.path.join(ANALYSIS_DIR, "revenue_leak_report.json")
+    data["leaks"] = json.load(open(leak_path)) if os.path.isfile(leak_path) else {}
+
+    return data
+
+
+def make_revenue_trend(sales):
+    """Monthly revenue trend line chart."""
+    won = sales[sales["deal_stage"] == "closed_won"].copy()
+    monthly = won.groupby("month")["revenue"].sum().reset_index().sort_values("month")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=monthly["month"], y=monthly["revenue"],
+        mode="lines+markers", line=dict(color=COLORS["accent"], width=3),
+        marker=dict(size=8, color=COLORS["red"]),
+        fill="tozeroy", fillcolor="rgba(244,162,97,0.15)", name="Revenue"
+    ))
+    fig.update_layout(title="Monthly Revenue Trend", **LAYOUT,
+                      yaxis=dict(tickprefix="₹", gridcolor="#1B4F72"),
+                      xaxis=dict(gridcolor="#1B4F72"))
+    return fig
+
+
+def make_channel_roas(marketing):
+    """ROAS by channel bar chart."""
+    by_ch = marketing.groupby("channel").agg(
+        spend=("spend", "sum"), revenue=("revenue_generated", "sum")
+    ).reset_index()
+    by_ch["roas"] = (by_ch["revenue"] / by_ch["spend"]).round(2)
+    fig = go.Figure(go.Bar(
+        x=by_ch["channel"], y=by_ch["roas"],
+        marker_color=COLORS["border"], text=by_ch["roas"].apply(lambda x: f"{x:.1f}x"),
+        textposition="outside", textfont=dict(color="white")
+    ))
+    fig.add_hline(y=2, line_dash="dash", line_color=COLORS["red"],
+                  annotation_text="2x Target", annotation_font_color=COLORS["red"])
+    fig.update_layout(title="ROAS by Channel", **LAYOUT,
+                      yaxis=dict(gridcolor="#1B4F72"), xaxis=dict(gridcolor="#1B4F72"))
+    return fig
+
+
+def make_ltv_distribution(customers):
+    """Customer LTV distribution histogram."""
+    fig = go.Figure(go.Histogram(
+        x=customers["total_revenue"], nbinsx=12,
+        marker_color=COLORS["border"], marker_line_color="white", marker_line_width=0.5
+    ))
+    fig.add_vline(x=customers["total_revenue"].mean(), line_dash="dash",
+                  line_color=COLORS["accent"],
+                  annotation_text=f"Mean ₹{customers['total_revenue'].mean():,.0f}",
+                  annotation_font_color=COLORS["accent"])
+    fig.update_layout(title="Customer LTV Distribution", **LAYOUT,
+                      xaxis=dict(tickprefix="₹", gridcolor="#1B4F72"),
+                      yaxis=dict(gridcolor="#1B4F72"))
+    return fig
+
+
+def make_segment_pie(customers):
+    """Revenue by segment donut chart."""
+    seg = customers.groupby("segment")["total_revenue"].sum().reset_index()
+    fig = go.Figure(go.Pie(
+        labels=seg["segment"], values=seg["total_revenue"], hole=0.45,
+        marker=dict(colors=[COLORS["green"], COLORS["accent"], COLORS["red"]]),
+        textfont=dict(color="white", size=13)
+    ))
+    fig.update_layout(title="Revenue by Customer Segment",
+                      paper_bgcolor=COLORS["bg"], font=dict(color=COLORS["text"]),
+                      margin=dict(l=20, r=20, t=50, b=20))
+    return fig
+
+
+def make_funnel_chart(sales):
+    """Sales funnel bar chart."""
+    total = len(sales)
+    proposals = len(sales[sales["deal_stage"].isin(["proposal", "closed_won", "closed_lost"])])
+    won = len(sales[sales["deal_stage"] == "closed_won"])
+
+    fig = go.Figure(go.Bar(
+        x=["Total Leads", "Proposals", "Won"],
+        y=[total, proposals, won],
+        marker_color=[COLORS["border"], COLORS["accent"], COLORS["green"]],
+        text=[total, proposals, won], textposition="outside",
+        textfont=dict(color="white", size=14)
+    ))
+    fig.update_layout(title="Sales Funnel", **LAYOUT,
+                      yaxis=dict(gridcolor="#1B4F72"), xaxis=dict(gridcolor="#1B4F72"))
+    return fig
+
+
+def build_app(data):
+    """Build the Dash application layout and callbacks."""
+    app = dash.Dash(__name__, title="Monarch Analytics — Audit Dashboard")
+    kpis = data.get("kpis", {})
+    leaks = data.get("leaks", {})
+    s = kpis.get("sales", {})
+    m = kpis.get("marketing", {})
+    c = kpis.get("customer", {})
+    f = kpis.get("financial", {})
+
+    def kpi_card(label, value, color=COLORS["accent"]):
+        return html.Div([
+            html.Div(value, style={"fontSize": "28px", "fontWeight": "bold", "color": color}),
+            html.Div(label, style={"fontSize": "12px", "color": COLORS["light"], "marginTop": "4px"}),
+        ], style={
+            "background": COLORS["card"], "borderRadius": "10px", "padding": "16px 20px",
+            "border": f"1px solid {COLORS['border']}", "textAlign": "center",
+            "minWidth": "140px", "flex": "1"
+        })
+
+    app.layout = html.Div(style={"background": COLORS["bg"], "minHeight": "100vh",
+                                  "fontFamily": "Calibri, sans-serif", "color": COLORS["text"]}, children=[
+
+        # Header
+        html.Div([
+            html.Div("MONARCH ANALYTICS", style={"color": COLORS["accent"], "fontSize": "13px",
+                                                  "fontWeight": "bold", "marginBottom": "4px"}),
+            html.H1("Business Performance Audit Dashboard",
+                    style={"color": "white", "margin": "0", "fontSize": "28px"}),
+            html.P("Interactive KPI dashboard — Real-time business intelligence",
+                   style={"color": COLORS["light"], "margin": "4px 0 0"})
+        ], style={"background": "#0a1520", "padding": "24px 40px",
+                  "borderBottom": f"2px solid {COLORS['border']}"}),
+
+        # KPI Cards Row
+        html.Div([
+            kpi_card("Total Revenue", f"₹{s.get('total_revenue', 0):,.0f}"),
+            kpi_card("Avg Deal Value", f"₹{s.get('average_deal_value', 0):,.0f}"),
+            kpi_card("Win Rate", f"{s.get('lead_conversion_rate', 0)*100:.1f}%"),
+            kpi_card("ROAS", f"{m.get('return_on_ad_spend', 0):.1f}x"),
+            kpi_card("CAC", f"₹{m.get('customer_acquisition_cost', 0):,.0f}"),
+            kpi_card("LTV", f"₹{c.get('customer_lifetime_value', 0):,.0f}"),
+            kpi_card("Retention", f"{c.get('retention_rate', 0)*100:.1f}%"),
+            kpi_card("Gross Margin", f"{f.get('gross_margin', 0)*100:.1f}%",
+                     color=COLORS["green"]),
+        ], style={"display": "flex", "gap": "12px", "padding": "20px 40px",
+                  "flexWrap": "wrap"}),
+
+        # Charts Row 1
+        html.Div([
+            html.Div(dcc.Graph(
+                figure=make_revenue_trend(data["sales"]),
+                style={"height": "350px"}
+            ), style={"flex": "2", "background": COLORS["card"],
+                      "borderRadius": "10px", "border": f"1px solid {COLORS['border']}",
+                      "padding": "10px"}),
+            html.Div(dcc.Graph(
+                figure=make_funnel_chart(data["sales"]),
+                style={"height": "350px"}
+            ), style={"flex": "1", "background": COLORS["card"],
+                      "borderRadius": "10px", "border": f"1px solid {COLORS['border']}",
+                      "padding": "10px"}),
+        ], style={"display": "flex", "gap": "16px", "padding": "0 40px 20px"}),
+
+        # Charts Row 2
+        html.Div([
+            html.Div(dcc.Graph(
+                figure=make_channel_roas(data["marketing"]),
+                style={"height": "320px"}
+            ), style={"flex": "1", "background": COLORS["card"],
+                      "borderRadius": "10px", "border": f"1px solid {COLORS['border']}",
+                      "padding": "10px"}),
+            html.Div(dcc.Graph(
+                figure=make_ltv_distribution(data["customers"]),
+                style={"height": "320px"}
+            ), style={"flex": "1", "background": COLORS["card"],
+                      "borderRadius": "10px", "border": f"1px solid {COLORS['border']}",
+                      "padding": "10px"}),
+            html.Div(dcc.Graph(
+                figure=make_segment_pie(data["customers"]),
+                style={"height": "320px"}
+            ), style={"flex": "1", "background": COLORS["card"],
+                      "borderRadius": "10px", "border": f"1px solid {COLORS['border']}",
+                      "padding": "10px"}),
+        ], style={"display": "flex", "gap": "16px", "padding": "0 40px 20px"}),
+
+        # Revenue Leaks Panel
+        html.Div([
+            html.H3("⚠️  Revenue Leak Alerts",
+                    style={"color": COLORS["red"], "margin": "0 0 12px"}),
+            html.Div([
+                html.Div([
+                    html.Span(f"[{l['impact_score']}/10] ", style={"color": COLORS["red"], "fontWeight": "bold"}),
+                    html.Span(l.get("flag", ""), style={"color": COLORS["accent"]}),
+                    html.Br(),
+                    html.Span(l.get("description", ""), style={"color": COLORS["light"], "fontSize": "13px"}),
+                ], style={"padding": "10px 14px", "marginBottom": "8px",
+                          "background": "#0D1B2A", "borderLeft": f"3px solid {COLORS['red']}",
+                          "borderRadius": "4px"})
+                for l in leaks.get("leaks", [])
+            ]) if leaks.get("leaks") else html.Div("✅ No revenue leaks detected.",
+                                                    style={"color": COLORS["green"]}),
+        ], style={"margin": "0 40px 30px", "background": COLORS["card"],
+                  "borderRadius": "10px", "padding": "20px",
+                  "border": f"1px solid {COLORS['border']}"}),
+
+        # Footer
+        html.Div("© Monarch Analytics  |  Confidential Audit Dashboard",
+                 style={"textAlign": "center", "padding": "16px",
+                        "color": COLORS["light"], "fontSize": "12px",
+                        "borderTop": f"1px solid {COLORS['border']}"}),
+    ])
+
+    return app
+
+
+def run_dashboard():
+    """Launch the dashboard server."""
+    if not DASH_AVAILABLE:
+        print("   ⚠️  Dash not installed. Run: pip install dash")
+        return
+
+    print("\n📊 Starting Dashboard Server...")
+    data = load_data()
+    app = build_app(data)
+    print("   ✅ Dashboard ready at http://localhost:8050")
+    app.run(debug=False, host="0.0.0.0", port=8050)
+
+
+if __name__ == "__main__":
+    run_dashboard()
+
+
+===== FILE: ./data_cleaning.py =====
+
+"""
+data_cleaning.py
+================
+Monarch Analytics — Data Cleaning Pipeline
+
+Loads all raw CSVs from audit_workspace/data/,
+applies cleaning transformations, and saves
+cleaned versions to audit_workspace/cleaned_data/.
+"""
+
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+RAW_DIR = "audit_workspace/data"
+CLEAN_DIR = "audit_workspace/cleaned_data"
+
+
+# ── Utility Helpers ───────────────────────────────────────────────────────────
+
+def parse_dates(df: pd.DataFrame, date_cols: list) -> pd.DataFrame:
+    """Convert date columns to datetime, coercing bad values."""
+    for col in date_cols:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce", format="%Y-%m-%d")
+    return df
+
+
+def normalize_text(df: pd.DataFrame, text_cols: list) -> pd.DataFrame:
+    """Lowercase and strip whitespace from text columns."""
+    for col in text_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip().str.lower()
+    return df
+
+
+def convert_numeric(df: pd.DataFrame, num_cols: list) -> pd.DataFrame:
+    """Force numeric columns to float, coercing errors to NaN."""
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def remove_duplicates(df: pd.DataFrame, name: str) -> pd.DataFrame:
+    """Remove fully duplicate rows."""
+    before = len(df)
+    df = df.drop_duplicates()
+    after = len(df)
+    if before != after:
+        print(f"   Removed {before - after} duplicate rows from {name}")
+    return df
+
+
+def fill_missing(df: pd.DataFrame, num_cols: list) -> pd.DataFrame:
+    """Fill numeric NaN with median; leave categoricals blank."""
+    for col in num_cols:
+        if col in df.columns and df[col].isnull().any():
+            median_val = df[col].median()
+            df[col] = df[col].fillna(median_val)
+    return df
+
+
+# ── Per-Dataset Cleaners ──────────────────────────────────────────────────────
+
+def clean_sales(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean and enrich sales data."""
+    df = remove_duplicates(df, "sales")
+    df = parse_dates(df, ["date", "lead_date", "close_date"])
+    df = normalize_text(df, ["channel", "deal_stage", "lead_source"])
+    df = convert_numeric(df, ["revenue"])
+    df = fill_missing(df, ["revenue"])
+
+    # Derived columns
+    df["sales_cycle_days"] = (df["close_date"] - df["lead_date"]).dt.days
+    df["month"] = df["date"].dt.to_period("M").astype(str)
+    df["year"] = df["date"].dt.year
+    df["is_won"] = df["deal_stage"] == "closed_won"
+    df["is_lost"] = df["deal_stage"] == "closed_lost"
+
+    return df
+
+
+def clean_marketing(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean and enrich marketing spend data."""
+    df = remove_duplicates(df, "marketing")
+    df = parse_dates(df, ["date"])
+    df = normalize_text(df, ["channel", "campaign"])
+    df = convert_numeric(df, ["spend", "impressions", "clicks", "conversions", "revenue_generated"])
+    df = fill_missing(df, ["spend", "impressions", "clicks", "conversions", "revenue_generated"])
+
+    # Derived metrics
+    df["click_through_rate"] = (df["clicks"] / df["impressions"].replace(0, np.nan)).round(4)
+    df["conversion_rate"] = (df["conversions"] / df["clicks"].replace(0, np.nan)).round(4)
+    df["cost_per_click"] = (df["spend"] / df["clicks"].replace(0, np.nan)).round(2)
+    df["roas"] = (df["revenue_generated"] / df["spend"].replace(0, np.nan)).round(2)
+    df["month"] = df["date"].dt.to_period("M").astype(str)
+
+    return df
+
+
+def clean_customers(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean and enrich customer data."""
+    df = remove_duplicates(df, "customers")
+    df = parse_dates(df, ["first_purchase_date", "last_purchase_date"])
+    df = normalize_text(df, ["segment", "location"])
+    df = convert_numeric(df, ["total_orders", "total_revenue"])
+    df = fill_missing(df, ["total_orders", "total_revenue"])
+
+    # Derived columns
+    df["avg_order_value"] = (df["total_revenue"] / df["total_orders"].replace(0, np.nan)).round(2)
+    df["customer_age_days"] = (pd.Timestamp.now() - df["first_purchase_date"]).dt.days
+    df["days_since_last_purchase"] = (pd.Timestamp.now() - df["last_purchase_date"]).dt.days
+    df["is_churned"] = df["days_since_last_purchase"] > 180  # 6 months = churned
+
+    return df
+
+
+def clean_products(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean product catalog."""
+    df = remove_duplicates(df, "products")
+    df = normalize_text(df, ["category"])
+    df = convert_numeric(df, ["price", "cost", "margin"])
+    df = fill_missing(df, ["price", "cost", "margin"])
+
+    # Validate margin
+    df["computed_margin"] = ((df["price"] - df["cost"]) / df["price"].replace(0, np.nan)).round(4)
+
+    return df
+
+
+def clean_operations(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean operational metrics."""
+    df = remove_duplicates(df, "operations")
+    df = parse_dates(df, ["date"])
+    df = normalize_text(df, ["department", "metric_name"])
+    df = convert_numeric(df, ["metric_value"])
+    df["month"] = df["date"].dt.to_period("M").astype(str)
+    return df
+
+
+# ── Main Cleaner ──────────────────────────────────────────────────────────────
+
+CLEANING_MAP = {
+    "01_sales_data_template.csv": clean_sales,
+    "02_marketing_spend_template.csv": clean_marketing,
+    "03_customer_data_template.csv": clean_customers,
+    "04_product_catalog_template.csv": clean_products,
+    "05_operational_metrics_template.csv": clean_operations,
+}
+
+OUTPUT_NAMES = {
+    "01_sales_data_template.csv": "sales_clean.csv",
+    "02_marketing_spend_template.csv": "marketing_clean.csv",
+    "03_customer_data_template.csv": "customers_clean.csv",
+    "04_product_catalog_template.csv": "products_clean.csv",
+    "05_operational_metrics_template.csv": "operations_clean.csv",
+}
+
+
+def run_cleaning():
+    """Execute the full data cleaning pipeline."""
+    print("\n" + "="*60)
+    print("  MONARCH ANALYTICS — DATA CLEANING PIPELINE")
+    print("="*60 + "\n")
+
+    os.makedirs(CLEAN_DIR, exist_ok=True)
+    summary = {}
+
+    for fname, cleaner_fn in CLEANING_MAP.items():
+        raw_path = os.path.join(RAW_DIR, fname)
+        out_name = OUTPUT_NAMES[fname]
+        out_path = os.path.join(CLEAN_DIR, out_name)
+
+        print(f"🔧 Cleaning: {fname}")
+
+        if not os.path.isfile(raw_path):
+            print(f"   ⚠️  File not found, skipping.\n")
+            continue
+
+        df = pd.read_csv(raw_path)
+        df.columns = df.columns.str.strip().str.lower()
+        original_rows = len(df)
+
+        df_clean = cleaner_fn(df)
+        df_clean.to_csv(out_path, index=False)
+
+        summary[fname] = {
+            "input_rows": original_rows,
+            "output_rows": len(df_clean),
+            "output_file": out_path
+        }
+        print(f"   ✅ {original_rows} rows → {len(df_clean)} rows saved to {out_name}\n")
+
+    print("="*60)
+    print("  ✅ DATA CLEANING COMPLETE")
+    print("="*60 + "\n")
+    return summary
+
+
+if __name__ == "__main__":
+    run_cleaning()
+
+
+===== FILE: ./generate_report.py =====
+
+"""
+generate_report.py
+==================
+Monarch Analytics — Automated PowerPoint Report Generator
+
+Generates a 20-slide branded audit report using python-pptx.
+Charts from analysis are automatically embedded into slides.
+"""
+
+import os
+import json
+import sys
+from datetime import datetime
+from pptx import Presentation
+from pptx.util import Inches, Pt, Emu
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+from pptx.util import Inches, Pt
+
+# ── Brand Colors ──────────────────────────────────────────────────────────────
+DARK_BG     = RGBColor(0x0D, 0x1B, 0x2A)
+NAVY        = RGBColor(0x1B, 0x4F, 0x72)
+BLUE        = RGBColor(0x2E, 0x86, 0xAB)
+LIGHT_BLUE  = RGBColor(0xA8, 0xDA, 0xDC)
+ORANGE      = RGBColor(0xF4, 0xA2, 0x61)
+RED         = RGBColor(0xE6, 0x39, 0x46)
+GREEN       = RGBColor(0x2E, 0xCC, 0x71)
+WHITE       = RGBColor(0xFF, 0xFF, 0xFF)
+
+VIZ_DIR     = "audit_workspace/visualizations"
+ANALYSIS_DIR = "audit_workspace/analysis"
+OUT_PATH    = "audit_workspace/report_outputs/business_audit_report.pptx"
+
+
+# ── Helper Functions ──────────────────────────────────────────────────────────
+
+def load_kpis() -> dict:
+    path = os.path.join(ANALYSIS_DIR, "kpi_results.json")
+    if os.path.isfile(path):
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
+def load_leaks() -> dict:
+    path = os.path.join(ANALYSIS_DIR, "revenue_leak_report.json")
+    if os.path.isfile(path):
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
+def set_slide_bg(slide, color: RGBColor):
+    """Set a solid background color for a slide."""
+    from pptx.oxml.ns import qn
+    from lxml import etree
+    bg = slide.background
+    fill = bg.fill
+    fill.solid()
+    fill.fore_color.rgb = color
+
+
+def add_textbox(slide, text, left, top, width, height,
+                font_size=18, bold=False, color=WHITE, align=PP_ALIGN.LEFT,
+                font_name="Calibri"):
+    """Add a styled text box to a slide."""
+    txBox = slide.shapes.add_textbox(
+        Inches(left), Inches(top), Inches(width), Inches(height)
+    )
+    tf = txBox.text_frame
+    tf.word_wrap = True
+    p = tf.paragraphs[0]
+    p.alignment = align
+    run = p.add_run()
+    run.text = text
+    run.font.size = Pt(font_size)
+    run.font.bold = bold
+    run.font.color.rgb = color
+    run.font.name = font_name
+    return txBox
+
+
+def add_image(slide, img_path, left, top, width, height=None):
+    """Insert an image into a slide if it exists."""
+    if os.path.isfile(img_path):
+        if height:
+            slide.shapes.add_picture(img_path, Inches(left), Inches(top),
+                                     Inches(width), Inches(height))
+        else:
+            slide.shapes.add_picture(img_path, Inches(left), Inches(top), Inches(width))
+    else:
+        add_textbox(slide, f"[Chart not found: {os.path.basename(img_path)}]",
+                    left, top, width, height or 2, font_size=10, color=ORANGE)
+
+
+def add_divider(slide, top, color=BLUE):
+    """Add a horizontal line divider."""
+    from pptx.util import Emu
+    connector = slide.shapes.add_connector(
+        1,  # MSO_CONNECTOR_TYPE.STRAIGHT
+        Inches(0.4), Inches(top), Inches(9.6), Inches(top)
+    )
+    connector.line.color.rgb = color
+    connector.line.width = Pt(1)
+
+
+def add_section_header(slide, title, subtitle=""):
+    """Standard slide header layout."""
+    add_textbox(slide, title, 0.4, 0.2, 9.2, 0.7,
+                font_size=26, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+    if subtitle:
+        add_textbox(slide, subtitle, 0.4, 0.85, 9.2, 0.4,
+                    font_size=13, color=LIGHT_BLUE, align=PP_ALIGN.LEFT)
+    add_divider(slide, 1.2)
+
+
+def add_kpi_box(slide, label, value, left, top, w=2.1, h=1.2,
+                bg_color=NAVY, val_color=ORANGE):
+    """Add a styled KPI metric card."""
+    from pptx.util import Emu
+    shape = slide.shapes.add_shape(
+        1, Inches(left), Inches(top), Inches(w), Inches(h)
+    )
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = bg_color
+    shape.line.color.rgb = BLUE
+
+    tb = shape.text_frame
+    tb.word_wrap = True
+    tb.text = value
+    p = tb.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    run = p.runs[0]
+    run.font.size = Pt(20)
+    run.font.bold = True
+    run.font.color.rgb = val_color
+    run.font.name = "Calibri"
+
+    p2 = tb.add_paragraph()
+    p2.alignment = PP_ALIGN.CENTER
+    r2 = p2.add_run()
+    r2.text = label
+    r2.font.size = Pt(10)
+    r2.font.color.rgb = LIGHT_BLUE
+    r2.font.name = "Calibri"
+
+
+# ── Slide Builders ────────────────────────────────────────────────────────────
+
+def slide_title(prs, kpis):
+    """Slide 1: Title / Cover"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+
+    # Monarch branding bar
+    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(10), Inches(1.2))
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = NAVY
+    bar.line.fill.background()
+
+    add_textbox(slide, "MONARCH ANALYTICS", 0.4, 0.15, 9.2, 0.7,
+                font_size=14, bold=True, color=ORANGE, align=PP_ALIGN.LEFT)
+
+    add_textbox(slide, "Business Performance\nAudit Report", 0.8, 1.6, 8.4, 2.0,
+                font_size=42, bold=True, color=WHITE, align=PP_ALIGN.LEFT)
+
+    add_textbox(slide, "Confidential | Prepared by Monarch Analytics",
+                0.8, 3.8, 8.4, 0.5, font_size=13, color=LIGHT_BLUE, align=PP_ALIGN.LEFT)
+
+    date_str = datetime.now().strftime("%B %Y")
+    add_textbox(slide, date_str, 0.8, 4.3, 8.4, 0.4,
+                font_size=13, color=ORANGE, align=PP_ALIGN.LEFT)
+
+    # Decorative accent
+    accent = slide.shapes.add_shape(1, Inches(0), Inches(6.2), Inches(10), Inches(0.8))
+    accent.fill.solid()
+    accent.fill.fore_color.rgb = BLUE
+    accent.line.fill.background()
+
+    add_textbox(slide, "DATA-DRIVEN DECISIONS  |  REVENUE GROWTH  |  BUSINESS CLARITY",
+                0.4, 6.25, 9.2, 0.5, font_size=11, color=WHITE, align=PP_ALIGN.CENTER)
+
+
+def slide_executive_summary(prs, kpis, leaks):
+    """Slide 2: Executive Summary"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Executive Summary",
+                       "Key findings from the business performance audit")
+
+    s = kpis.get("sales", {})
+    m = kpis.get("marketing", {})
+    c = kpis.get("customer", {})
+    f = kpis.get("financial", {})
+    n_leaks = leaks.get("total_leaks_detected", 0)
+    impact = leaks.get("total_estimated_revenue_impact", 0)
+
+    summary_lines = [
+        f"• Total Revenue Analyzed: ₹{s.get('total_revenue', 0):,.0f}",
+        f"• Lead-to-Sale Conversion: {s.get('lead_conversion_rate', 0)*100:.1f}%",
+        f"• Customer Acquisition Cost: ₹{m.get('customer_acquisition_cost', 0):,.0f}",
+        f"• Return on Ad Spend: {m.get('return_on_ad_spend', 0):.1f}x",
+        f"• Customer LTV: ₹{c.get('customer_lifetime_value', 0):,.0f}",
+        f"• Customer Retention Rate: {c.get('retention_rate', 0)*100:.1f}%",
+        f"• Gross Margin: {f.get('gross_margin', 0)*100:.1f}%",
+        f"• Revenue Leaks Detected: {n_leaks}",
+        f"• Estimated Revenue at Risk: ₹{impact:,.0f}",
+    ]
+
+    add_textbox(slide, "\n".join(summary_lines), 0.4, 1.4, 5.5, 5.0,
+                font_size=14, color=WHITE)
+
+    # Leaks box
+    box = slide.shapes.add_shape(1, Inches(6.2), Inches(1.4), Inches(3.4), Inches(2.2))
+    box.fill.solid()
+    box.fill.fore_color.rgb = NAVY
+    box.line.color.rgb = RED
+
+    tb = box.text_frame
+    tb.text = f"{n_leaks}"
+    p = tb.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    p.runs[0].font.size = Pt(52)
+    p.runs[0].font.bold = True
+    p.runs[0].font.color.rgb = RED
+
+    p2 = tb.add_paragraph()
+    p2.alignment = PP_ALIGN.CENTER
+    r2 = p2.add_run()
+    r2.text = "Revenue Leaks\nDetected"
+    r2.font.size = Pt(13)
+    r2.font.color.rgb = WHITE
+
+    # Impact box
+    box2 = slide.shapes.add_shape(1, Inches(6.2), Inches(3.8), Inches(3.4), Inches(1.8))
+    box2.fill.solid()
+    box2.fill.fore_color.rgb = NAVY
+    box2.line.color.rgb = ORANGE
+
+    tb2 = box2.text_frame
+    tb2.text = f"₹{impact:,.0f}"
+    p3 = tb2.paragraphs[0]
+    p3.alignment = PP_ALIGN.CENTER
+    p3.runs[0].font.size = Pt(22)
+    p3.runs[0].font.bold = True
+    p3.runs[0].font.color.rgb = ORANGE
+
+    p4 = tb2.add_paragraph()
+    p4.alignment = PP_ALIGN.CENTER
+    r4 = p4.add_run()
+    r4.text = "Revenue at Risk"
+    r4.font.size = Pt(12)
+    r4.font.color.rgb = LIGHT_BLUE
+
+
+def slide_key_metrics(prs, kpis):
+    """Slide 3: KPI Snapshot"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Key Metrics Snapshot", "Core KPIs across sales, marketing, and customer")
+
+    s = kpis.get("sales", {})
+    m = kpis.get("marketing", {})
+    c = kpis.get("customer", {})
+    f = kpis.get("financial", {})
+
+    metrics = [
+        ("Total Revenue", f"₹{s.get('total_revenue', 0):,.0f}"),
+        ("Avg Deal Value", f"₹{s.get('average_deal_value', 0):,.0f}"),
+        ("Win Rate", f"{s.get('lead_conversion_rate', 0)*100:.1f}%"),
+        ("ROAS", f"{m.get('return_on_ad_spend', 0):.1f}x"),
+        ("CAC", f"₹{m.get('customer_acquisition_cost', 0):,.0f}"),
+        ("LTV", f"₹{c.get('customer_lifetime_value', 0):,.0f}"),
+        ("Retention", f"{c.get('retention_rate', 0)*100:.1f}%"),
+        ("Gross Margin", f"{f.get('gross_margin', 0)*100:.1f}%"),
+    ]
+
+    cols = 4
+    for i, (label, val) in enumerate(metrics):
+        col = i % cols
+        row = i // cols
+        left = 0.3 + col * 2.35
+        top = 1.5 + row * 1.5
+        add_kpi_box(slide, label, val, left, top)
+
+
+def slide_revenue_chart(prs):
+    """Slide 4: Revenue Trend"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Revenue Performance", "Monthly revenue trend analysis")
+    add_image(slide, os.path.join(VIZ_DIR, "revenue_trend.png"), 0.5, 1.4, 9.0, 5.0)
+
+
+def slide_sales_funnel(prs):
+    """Slide 5: Sales Funnel"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Sales Funnel Analysis", "Lead-to-close conversion performance")
+    add_image(slide, os.path.join(VIZ_DIR, "sales_funnel_chart.png"), 0.5, 1.4, 9.0, 5.0)
+
+
+def slide_marketing(prs):
+    """Slide 6: Marketing Performance"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Marketing Efficiency", "Channel performance and spend effectiveness")
+    add_image(slide, os.path.join(VIZ_DIR, "channel_performance.png"), 0.3, 1.4, 9.4, 5.0)
+
+
+def slide_cac_ltv(prs):
+    """Slide 7: CAC vs LTV"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "CAC vs Customer Lifetime Value",
+                       "Sustainability of customer acquisition investment")
+    add_image(slide, os.path.join(VIZ_DIR, "cac_vs_ltv.png"), 1.0, 1.4, 8.0, 4.8)
+
+
+def slide_marketing_funnel(prs):
+    """Slide 8: Marketing Funnel"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Marketing Conversion Funnel",
+                       "Impression-to-conversion drop-off analysis")
+    add_image(slide, os.path.join(VIZ_DIR, "marketing_funnel.png"), 0.5, 1.4, 9.0, 5.0)
+
+
+def slide_customer_ltv(prs):
+    """Slide 9: LTV Distribution"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Customer Lifetime Value Distribution",
+                       "Revenue concentration and value segmentation")
+    add_image(slide, os.path.join(VIZ_DIR, "ltv_distribution.png"), 0.5, 1.4, 9.0, 5.0)
+
+
+def slide_customer_segments(prs):
+    """Slide 10: Customer Segments"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Customer Segment Analysis",
+                       "Revenue and retention by customer tier")
+    add_image(slide, os.path.join(VIZ_DIR, "customer_cohort_retention.png"), 0.3, 1.4, 9.4, 5.0)
+
+
+def slide_pareto(prs, drivers):
+    """Slide 11: Pareto Revenue"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    pct = drivers.get("pareto_top_20pct_revenue_share", 0) if drivers else 0
+    add_section_header(slide, "Pareto Revenue Analysis",
+                       f"Top 20% of customers drive {pct}% of total revenue")
+    add_image(slide, os.path.join(VIZ_DIR, "pareto_revenue_chart.png"), 0.3, 1.4, 9.4, 5.0)
+
+
+def slide_revenue_leaks(prs, leaks):
+    """Slide 12: Revenue Leak Summary"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Revenue Leak Detection Results",
+                       "Automated analysis of business performance gaps")
+
+    leak_list = leaks.get("leaks", [])
+    if not leak_list:
+        add_textbox(slide, "✅ No significant revenue leaks detected.",
+                    0.5, 2.0, 9.0, 1.0, font_size=18, color=GREEN)
+        return
+
+    for i, leak in enumerate(leak_list[:5]):
+        top = 1.5 + i * 1.0
+        score = leak.get("impact_score", 0)
+        color = RED if score >= 8 else ORANGE if score >= 6 else LIGHT_BLUE
+
+        box = slide.shapes.add_shape(1, Inches(0.3), Inches(top), Inches(9.4), Inches(0.85))
+        box.fill.solid()
+        box.fill.fore_color.rgb = NAVY
+        box.line.color.rgb = color
+
+        tb = box.text_frame
+        tb.word_wrap = True
+        tb.text = f"[{score}/10] {leak.get('flag', '')}  —  {leak.get('description', '')}"
+        p = tb.paragraphs[0]
+        p.runs[0].font.size = Pt(11)
+        p.runs[0].font.color.rgb = WHITE
+        p.runs[0].font.name = "Calibri"
+
+
+def slide_fix_improve_ignore(prs, leaks):
+    """Slide 13: Fix / Improve / Ignore Framework"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Fix | Improve | Ignore Framework",
+                       "Prioritized action plan based on impact and effort")
+
+    leak_list = leaks.get("leaks", [])
+    fix_items    = [l for l in leak_list if l.get("impact_score", 0) >= 8]
+    improve_items = [l for l in leak_list if 5 <= l.get("impact_score", 0) < 8]
+    ignore_items  = [l for l in leak_list if l.get("impact_score", 0) < 5]
+
+    sections = [
+        ("🔴 FIX (Immediate)", fix_items, RED, 0.3),
+        ("🟡 IMPROVE (This Quarter)", improve_items, ORANGE, 3.5),
+        ("🟢 IGNORE (Low Impact)", ignore_items, GREEN, 6.7),
+    ]
+
+    for label, items, color, left in sections:
+        box = slide.shapes.add_shape(1, Inches(left), Inches(1.4), Inches(3.0), Inches(4.8))
+        box.fill.solid()
+        box.fill.fore_color.rgb = NAVY
+        box.line.color.rgb = color
+
+        tb = box.text_frame
+        tb.word_wrap = True
+        tb.text = label
+        p = tb.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        p.runs[0].font.size = Pt(13)
+        p.runs[0].font.bold = True
+        p.runs[0].font.color.rgb = color
+
+        for item in items[:4]:
+            p2 = tb.add_paragraph()
+            r = p2.add_run()
+            r.text = f"• {item.get('rule', '').replace('_', ' ').title()}"
+            r.font.size = Pt(10)
+            r.font.color.rgb = WHITE
+
+        if not items:
+            p2 = tb.add_paragraph()
+            r = p2.add_run()
+            r.text = "• None identified"
+            r.font.size = Pt(10)
+            r.font.color.rgb = LIGHT_BLUE
+
+
+def slide_recommendations(prs, leaks):
+    """Slide 14: Top Recommendations"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Recommended Actions",
+                       "Prioritized steps to recover revenue and improve performance")
+
+    leak_list = leaks.get("leaks", [])
+    top_leaks = sorted(leak_list, key=lambda x: x.get("impact_score", 0), reverse=True)[:5]
+
+    for i, leak in enumerate(top_leaks):
+        top = 1.5 + i * 1.0
+        add_textbox(slide,
+                    f"{i+1}.  {leak.get('recommended_action', '')}",
+                    0.5, top, 9.0, 0.85, font_size=12, color=WHITE)
+
+
+def slide_roadmap(prs):
+    """Slide 15: Implementation Roadmap"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "90-Day Implementation Roadmap",
+                       "Execution timeline for audit recommendations")
+
+    phases = [
+        ("Days 1–30\nQuick Wins", "• Fix top funnel leaks\n• Pause low-ROAS ad sets\n• Launch churn survey", ORANGE),
+        ("Days 31–60\nGrowth Sprint", "• Implement retention program\n• Pricing review\n• Sales enablement rollout", BLUE),
+        ("Days 61–90\nScale Up", "• Review KPI dashboard\n• Measure improvements\n• Expand winning channels", GREEN),
+    ]
+
+    for i, (title, bullets, color) in enumerate(phases):
+        left = 0.3 + i * 3.3
+        box = slide.shapes.add_shape(1, Inches(left), Inches(1.5), Inches(3.1), Inches(4.6))
+        box.fill.solid()
+        box.fill.fore_color.rgb = NAVY
+        box.line.color.rgb = color
+
+        tb = box.text_frame
+        tb.word_wrap = True
+        tb.text = title
+        p = tb.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        p.runs[0].font.size = Pt(14)
+        p.runs[0].font.bold = True
+        p.runs[0].font.color.rgb = color
+
+        for line in bullets.split("\n"):
+            p2 = tb.add_paragraph()
+            r = p2.add_run()
+            r.text = line
+            r.font.size = Pt(11)
+            r.font.color.rgb = WHITE
+
+
+def slide_financial_impact(prs, leaks, kpis):
+    """Slide 16: Financial Impact Estimate"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Financial Impact Estimate",
+                       "Revenue recovery potential from addressing identified leaks")
+
+    total_impact = leaks.get("total_estimated_revenue_impact", 0)
+    total_rev = kpis.get("sales", {}).get("total_revenue", 1)
+    pct = (total_impact / total_rev * 100) if total_rev else 0
+
+    lines = [
+        f"Total Revenue Analyzed:          ₹{total_rev:,.0f}",
+        f"Revenue at Risk (Leaks):          ₹{total_impact:,.0f}",
+        f"Revenue at Risk (%):               {pct:.1f}%",
+        "",
+        "If all recommendations are implemented:",
+        f"  Estimated Revenue Recovery:  ₹{total_impact * 0.6:,.0f} – ₹{total_impact * 0.9:,.0f}",
+        f"  Conservative ROI on Audit:    {max(3, total_impact * 0.5 / 50000):.0f}x",
+    ]
+
+    add_textbox(slide, "\n".join(lines), 0.5, 1.5, 9.0, 4.5,
+                font_size=15, color=WHITE)
+
+
+def slide_retainer_offer(prs):
+    """Slide 17: Monarch Retainer Offer"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+
+    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(10), Inches(1.0))
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = NAVY
+    bar.line.fill.background()
+
+    add_textbox(slide, "MONARCH ANALYTICS", 0.4, 0.12, 4, 0.6,
+                font_size=13, bold=True, color=ORANGE)
+
+    add_textbox(slide, "Continue the Growth Journey", 0.8, 1.2, 8.4, 0.8,
+                font_size=30, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+
+    add_textbox(slide, "Monarch Analytics Retainer — Monthly Intelligence Partnership",
+                0.8, 2.0, 8.4, 0.5, font_size=14, color=LIGHT_BLUE, align=PP_ALIGN.CENTER)
+
+    offerings = [
+        "✅  Monthly KPI Dashboard Updates",
+        "✅  Quarterly Business Performance Audits",
+        "✅  Dedicated Analytics Support (Slack / Email)",
+        "✅  Revenue Leak Monitoring Alerts",
+        "✅  Custom Dashboard & Reporting",
+        "✅  Strategic Growth Advisory Sessions",
+    ]
+    add_textbox(slide, "\n".join(offerings), 1.5, 2.7, 7.0, 3.2,
+                font_size=13, color=WHITE)
+
+    cta_box = slide.shapes.add_shape(1, Inches(2.5), Inches(5.8), Inches(5.0), Inches(0.8))
+    cta_box.fill.solid()
+    cta_box.fill.fore_color.rgb = ORANGE
+    cta_box.line.fill.background()
+
+    tb = cta_box.text_frame
+    tb.text = "Schedule Your Strategy Call → monarchanalytics.in"
+    p = tb.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    p.runs[0].font.size = Pt(13)
+    p.runs[0].font.bold = True
+    p.runs[0].font.color.rgb = DARK_BG
+
+
+def slide_methodology(prs):
+    """Slide 18: Data Sources & Methodology"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "Data Sources & Methodology",
+                       "How this audit was conducted")
+
+    content = (
+        "Data Sources Analyzed:\n"
+        "  • Sales CRM Data (transactions, deal stages, pipeline)\n"
+        "  • Marketing Spend Data (channels, campaigns, ROAS)\n"
+        "  • Customer Database (LTV, retention, segments)\n"
+        "  • Product Catalog (pricing, margins, cost structure)\n"
+        "  • Operational Metrics (departmental KPIs)\n\n"
+        "Methodology:\n"
+        "  • Standardized data intake with format validation\n"
+        "  • Automated data cleaning and normalization\n"
+        "  • Rule-based revenue leak detection engine\n"
+        "  • Industry benchmark comparison\n"
+        "  • Pareto analysis for revenue concentration\n"
+        "  • Cohort-based customer segmentation"
+    )
+    add_textbox(slide, content, 0.5, 1.4, 9.0, 5.0, font_size=13, color=WHITE)
+
+
+def slide_about(prs):
+    """Slide 19: About Monarch Analytics"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+    add_section_header(slide, "About Monarch Analytics",
+                       "Your Business Intelligence Partner")
+
+    about = (
+        "Monarch Analytics is a data intelligence firm that helps growth-stage\n"
+        "businesses unlock revenue trapped in underperforming systems.\n\n"
+        "We productize every audit — so your insights are delivered fast,\n"
+        "consistently, and with measurable financial impact.\n\n"
+        "Our Approach:\n"
+        "  • Standardized audit framework across all client engagements\n"
+        "  • Automated KPI calculation and revenue leak detection\n"
+        "  • Interactive dashboards and automated reporting\n"
+        "  • Actionable recommendations backed by data\n\n"
+        "Contact: hello@monarchanalytics.in  |  monarchanalytics.in"
+    )
+    add_textbox(slide, about, 0.5, 1.4, 9.0, 5.0, font_size=13, color=WHITE)
+
+
+def slide_thank_you(prs):
+    """Slide 20: Thank You"""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    set_slide_bg(slide, DARK_BG)
+
+    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(10), Inches(1.0))
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = NAVY
+    bar.line.fill.background()
+
+    add_textbox(slide, "MONARCH ANALYTICS", 0.4, 0.12, 4, 0.6,
+                font_size=13, bold=True, color=ORANGE)
+
+    add_textbox(slide, "Thank You", 1.0, 2.0, 8.0, 1.2,
+                font_size=52, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+
+    add_textbox(slide,
+                "This report was automatically generated by the\nMonarch Analytics Audit System.",
+                1.0, 3.4, 8.0, 0.9, font_size=15, color=LIGHT_BLUE, align=PP_ALIGN.CENTER)
+
+    add_textbox(slide, "Data-Driven Decisions. Revenue Growth. Business Clarity.",
+                1.0, 4.5, 8.0, 0.6, font_size=13, color=ORANGE, align=PP_ALIGN.CENTER)
+
+    footer_bar = slide.shapes.add_shape(1, Inches(0), Inches(6.2), Inches(10), Inches(0.8))
+    footer_bar.fill.solid()
+    footer_bar.fill.fore_color.rgb = BLUE
+    footer_bar.line.fill.background()
+
+    add_textbox(slide, "CONFIDENTIAL  |  © Monarch Analytics  |  monarchanalytics.in",
+                0.4, 6.28, 9.2, 0.5, font_size=11, color=WHITE, align=PP_ALIGN.CENTER)
+
+
+# ── Main Generator ────────────────────────────────────────────────────────────
+
+def generate_report(kpis=None, leaks=None, drivers=None):
+    """Build and save the full PowerPoint report."""
+    print("\n📊 Generating PowerPoint Audit Report...")
+
+    if kpis is None:
+        kpis = load_kpis()
+    if leaks is None:
+        leaks = load_leaks()
+
+    prs = Presentation()
+    prs.slide_width  = Inches(10)
+    prs.slide_height = Inches(7)
+
+    os.makedirs("audit_workspace/report_outputs", exist_ok=True)
+
+    slides_fn = [
+        lambda: slide_title(prs, kpis),
+        lambda: slide_executive_summary(prs, kpis, leaks),
+        lambda: slide_key_metrics(prs, kpis),
+        lambda: slide_revenue_chart(prs),
+        lambda: slide_sales_funnel(prs),
+        lambda: slide_marketing(prs),
+        lambda: slide_cac_ltv(prs),
+        lambda: slide_marketing_funnel(prs),
+        lambda: slide_customer_ltv(prs),
+        lambda: slide_customer_segments(prs),
+        lambda: slide_pareto(prs, drivers),
+        lambda: slide_revenue_leaks(prs, leaks),
+        lambda: slide_fix_improve_ignore(prs, leaks),
+        lambda: slide_recommendations(prs, leaks),
+        lambda: slide_roadmap(prs),
+        lambda: slide_financial_impact(prs, leaks, kpis),
+        lambda: slide_methodology(prs),
+        lambda: slide_about(prs),
+        lambda: slide_retainer_offer(prs),
+        lambda: slide_thank_you(prs),
+    ]
+
+    for i, fn in enumerate(slides_fn, 1):
+        fn()
+        print(f"   🖼️  Slide {i:02d}/20 built")
+
+    prs.save(OUT_PATH)
+    print(f"\n   ✅ Report saved: {OUT_PATH}")
+    return OUT_PATH
+
+
+if __name__ == "__main__":
+    generate_report()
+
+
+===== FILE: ./kpi_library.py =====
+
+"""
+kpi_library.py
+==============
+Monarch Analytics — KPI Calculation Library
+
+Centralized module to calculate all 30+ KPIs
+and return them as structured JSON.
+"""
+
+import os
+import json
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+CLEAN_DIR = "audit_workspace/cleaned_data"
+
+
+def load_all_data() -> dict:
+    """Load all cleaned datasets into a dictionary."""
+    datasets = {}
+    files = {
+        "sales": "sales_clean.csv",
+        "marketing": "marketing_clean.csv",
+        "customers": "customers_clean.csv",
+        "products": "products_clean.csv",
+        "operations": "operations_clean.csv",
+    }
+    for key, fname in files.items():
+        path = os.path.join(CLEAN_DIR, fname)
+        if os.path.isfile(path):
+            datasets[key] = pd.read_csv(path)
+    return datasets
+
+
+# ── Sales KPIs ────────────────────────────────────────────────────────────────
+
+def calc_sales_kpis(sales: pd.DataFrame) -> dict:
+    """Calculate all sales funnel KPIs."""
+    won = sales[sales["deal_stage"] == "closed_won"]
+    proposals = sales[sales["deal_stage"].isin(["proposal", "closed_won", "closed_lost"])]
+
+    total_leads = len(sales)
+    deals_won = len(won)
+
+    lead_conv = deals_won / total_leads if total_leads else 0
+    opp_conv = deals_won / len(proposals) if len(proposals) else 0
+    avg_deal = won["revenue"].mean() if deals_won else 0
+
+    sales["sales_cycle_days"] = pd.to_numeric(
+        pd.to_datetime(sales.get("close_date", pd.NaT), errors="coerce").sub(
+            pd.to_datetime(sales.get("lead_date", pd.NaT), errors="coerce")
+        ).dt.days, errors="coerce"
+    )
+    avg_cycle = sales.loc[sales["deal_stage"] == "closed_won", "sales_cycle_days"].dropna().mean()
+    avg_cycle = avg_cycle if not pd.isna(avg_cycle) else 0
+    total_rev = won["revenue"].sum()
+    pipeline_vel = total_rev / avg_cycle if avg_cycle else 0
+
+    return {
+        "lead_conversion_rate": round(lead_conv, 4),
+        "opportunity_conversion_rate": round(opp_conv, 4),
+        "average_deal_value": round(float(avg_deal), 2),
+        "sales_cycle_length_days": round(float(avg_cycle), 1),
+        "pipeline_velocity": round(float(pipeline_vel), 2),
+        "total_deals_won": deals_won,
+        "total_revenue": round(float(total_rev), 2),
+        "win_rate": round(lead_conv, 4),
+    }
+
+
+# ── Marketing KPIs ────────────────────────────────────────────────────────────
+
+def calc_marketing_kpis(marketing: pd.DataFrame, customers: pd.DataFrame) -> dict:
+    """Calculate all marketing efficiency KPIs."""
+    total_spend = marketing["spend"].sum()
+    total_rev = marketing["revenue_generated"].sum()
+    total_clicks = marketing["clicks"].sum()
+    total_conv = marketing["conversions"].sum()
+    total_cust = len(customers)
+
+    cac = total_spend / total_cust if total_cust else 0
+    roas = total_rev / total_spend if total_spend else 0
+    cvr = total_conv / total_clicks if total_clicks else 0
+    funnel_dropoff = 1 - cvr
+
+    return {
+        "customer_acquisition_cost": round(float(cac), 2),
+        "return_on_ad_spend": round(float(roas), 2),
+        "channel_conversion_rate": round(float(cvr), 4),
+        "funnel_dropoff_rate": round(float(funnel_dropoff), 4),
+        "total_marketing_spend": round(float(total_spend), 2),
+        "marketing_revenue_generated": round(float(total_rev), 2),
+        "cost_per_click": round(float(total_spend / total_clicks if total_clicks else 0), 2),
+        "total_conversions": int(total_conv),
+    }
+
+
+# ── Financial KPIs ────────────────────────────────────────────────────────────
+
+def calc_financial_kpis(products: pd.DataFrame, customers: pd.DataFrame, marketing: pd.DataFrame) -> dict:
+    """Calculate financial health KPIs."""
+    gross_margin = products["margin"].mean()
+    total_rev = customers["total_revenue"].sum()
+    total_spend = marketing["spend"].sum()
+    total_cust = len(customers)
+
+    contribution_margin = gross_margin - (total_spend / total_rev if total_rev else 0)
+    cpa = total_spend / total_cust if total_cust else 0
+    unit_economics = total_rev / total_cust if total_cust else 0
+
+    return {
+        "gross_margin": round(float(gross_margin), 4),
+        "contribution_margin": round(float(contribution_margin), 4),
+        "unit_economics_revenue_per_customer": round(float(unit_economics), 2),
+        "cost_per_acquisition": round(float(cpa), 2),
+        "avg_product_price": round(float(products["price"].mean()), 2),
+        "avg_product_cost": round(float(products["cost"].mean()), 2),
+    }
+
+
+# ── Customer KPIs ─────────────────────────────────────────────────────────────
+
+def calc_customer_kpis(customers: pd.DataFrame) -> dict:
+    """Calculate customer lifetime and retention KPIs."""
+    total = len(customers)
+    churned = customers["is_churned"].sum() if "is_churned" in customers.columns else 0
+    retention = 1 - (churned / total) if total else 0
+    churn_rate = churned / total if total else 0
+    repeat_rate = len(customers[customers["total_orders"] > 1]) / total if total else 0
+
+    avg_order_val = customers["avg_order_value"].mean() if "avg_order_value" in customers.columns else customers["total_revenue"].mean()
+    avg_orders = customers["total_orders"].mean()
+    retention_period = 2.0
+    ltv = avg_order_val * avg_orders * retention_period
+
+    return {
+        "customer_lifetime_value": round(float(ltv), 2),
+        "churn_rate": round(float(churn_rate), 4),
+        "retention_rate": round(float(retention), 4),
+        "repeat_purchase_rate": round(float(repeat_rate), 4),
+        "average_order_value": round(float(avg_order_val), 2),
+        "average_orders_per_customer": round(float(avg_orders), 2),
+        "total_customers": int(total),
+        "active_customers": int(total - churned),
+        "churned_customers": int(churned),
+    }
+
+
+# ── Master KPI Calculator ─────────────────────────────────────────────────────
+
+def calculate_all_kpis() -> dict:
+    """
+    Run all KPI calculations and return structured JSON.
+    Also saves results to audit_workspace/analysis/kpi_results.json
+    """
+    print("\n📐 Calculating KPIs...")
+    datasets = load_all_data()
+
+    kpis = {
+        "calculated_at": datetime.now().isoformat(),
+        "sales": calc_sales_kpis(datasets["sales"]) if "sales" in datasets else {},
+        "marketing": calc_marketing_kpis(datasets["marketing"], datasets["customers"])
+                     if "marketing" in datasets and "customers" in datasets else {},
+        "financial": calc_financial_kpis(datasets["products"], datasets["customers"], datasets["marketing"])
+                     if all(k in datasets for k in ["products", "customers", "marketing"]) else {},
+        "customer": calc_customer_kpis(datasets["customers"]) if "customers" in datasets else {},
+    }
+
+    # Save to file
+    os.makedirs("audit_workspace/analysis", exist_ok=True)
+    out_path = "audit_workspace/analysis/kpi_results.json"
+    with open(out_path, "w") as f:
+        json.dump(kpis, f, indent=2)
+
+    # Print summary
+    s = kpis.get("sales", {})
+    m = kpis.get("marketing", {})
+    c = kpis.get("customer", {})
+    f = kpis.get("financial", {})
+
+    print(f"   💼 Sales — Conversion: {s.get('lead_conversion_rate',0)*100:.1f}%, Avg Deal: ₹{s.get('average_deal_value',0):,.0f}")
+    print(f"   📣 Marketing — CAC: ₹{m.get('customer_acquisition_cost',0):,.0f}, ROAS: {m.get('return_on_ad_spend',0):.1f}x")
+    print(f"   👥 Customer — LTV: ₹{c.get('customer_lifetime_value',0):,.0f}, Churn: {c.get('churn_rate',0)*100:.1f}%")
+    print(f"   💰 Finance — Gross Margin: {f.get('gross_margin',0)*100:.1f}%")
+    print(f"   ✅ KPIs saved to {out_path}")
+
+    return kpis
+
+
+if __name__ == "__main__":
+    calculate_all_kpis()
+
+
+===== FILE: ./revenue_leak_detector.py =====
+
+"""
+revenue_leak_detector.py
+========================
+Monarch Analytics — Revenue Leak Detection Engine
+
+Rule-based system that flags business problems
+by comparing KPIs against industry benchmarks.
+"""
+
+import os
+import json
+from datetime import datetime
+
+OUTPUT_PATH = "audit_workspace/analysis/revenue_leak_report.json"
+
+# ── Industry Benchmarks ───────────────────────────────────────────────────────
+
+BENCHMARKS = {
+    "conversion_rate": 0.15,        # 15% lead-to-sale benchmark
+    "ltv_to_cac_max_ratio": 0.40,   # CAC should not exceed 40% of LTV
+    "min_retention_rate": 0.40,     # 40% minimum retention
+    "min_gross_margin": 0.50,       # 50% minimum gross margin
+    "min_roas": 2.0,                # 2x minimum ROAS
+    "max_sales_cycle_days": 45,     # 45 days max ideal sales cycle
+    "min_repeat_purchase_rate": 0.30,
+}
+
+
+# ── Detection Rules ───────────────────────────────────────────────────────────
+
+def rule_sales_funnel_leak(kpis: dict) -> dict | None:
+    """Rule 1: Low lead-to-sale conversion flags a sales funnel problem."""
+    rate = kpis.get("sales", {}).get("lead_conversion_rate", 1.0)
+    benchmark = BENCHMARKS["conversion_rate"]
+    if rate < benchmark:
+        shortfall = benchmark - rate
+        impact = round(shortfall * kpis.get("sales", {}).get("total_revenue", 0), 2)
+        return {
+            "rule": "sales_funnel_leak",
+            "flag": "⚠️  SALES FUNNEL LEAK",
+            "description": (f"Lead-to-sale conversion rate is {rate*100:.1f}%, "
+                            f"below the {benchmark*100:.0f}% benchmark."),
+            "current_value": rate,
+            "benchmark": benchmark,
+            "impact_score": 8,
+            "estimated_revenue_impact": impact,
+            "recommended_action": (
+                "Audit each funnel stage. Focus on lead qualification, "
+                "improve demo-to-proposal conversion, and implement follow-up cadence."
+            )
+        }
+    return None
+
+
+def rule_marketing_inefficiency(kpis: dict) -> dict | None:
+    """Rule 2: CAC > 40% of LTV flags unsustainable marketing spend."""
+    cac = kpis.get("marketing", {}).get("customer_acquisition_cost", 0)
+    ltv = kpis.get("customer", {}).get("customer_lifetime_value", 1)
+    ratio = cac / ltv if ltv else 0
+    threshold = BENCHMARKS["ltv_to_cac_max_ratio"]
+    if ratio > threshold:
+        return {
+            "rule": "marketing_inefficiency",
+            "flag": "⚠️  MARKETING INEFFICIENCY",
+            "description": (f"CAC (₹{cac:,.0f}) is {ratio*100:.0f}% of LTV (₹{ltv:,.0f}). "
+                            f"Threshold is {threshold*100:.0f}%."),
+            "current_value": ratio,
+            "benchmark": threshold,
+            "impact_score": 9,
+            "estimated_revenue_impact": round((ratio - threshold) * ltv * kpis.get("customer", {}).get("total_customers", 0), 2),
+            "recommended_action": (
+                "Shift budget to highest-ROAS channels. Improve organic/referral mix. "
+                "Reduce paid channel dependency and optimize targeting."
+            )
+        }
+    return None
+
+
+def rule_customer_churn(kpis: dict) -> dict | None:
+    """Rule 3: Low retention flags a churn problem."""
+    retention = kpis.get("customer", {}).get("retention_rate", 1.0)
+    threshold = BENCHMARKS["min_retention_rate"]
+    if retention < threshold:
+        churned = kpis.get("customer", {}).get("churned_customers", 0)
+        ltv = kpis.get("customer", {}).get("customer_lifetime_value", 0)
+        impact = churned * ltv
+        return {
+            "rule": "customer_churn_issue",
+            "flag": "⚠️  CUSTOMER CHURN ISSUE",
+            "description": (f"Retention rate is {retention*100:.1f}%, "
+                            f"below the {threshold*100:.0f}% threshold. "
+                            f"{churned} customers have churned."),
+            "current_value": retention,
+            "benchmark": threshold,
+            "impact_score": 9,
+            "estimated_revenue_impact": round(impact, 2),
+            "recommended_action": (
+                "Implement customer success program. Add 30/60/90 day check-ins. "
+                "Launch loyalty program and monitor NPS. Identify churn triggers in exit interviews."
+            )
+        }
+    return None
+
+
+def rule_pricing_problem(kpis: dict) -> dict | None:
+    """Rule 4: Low gross margin flags a pricing or cost problem."""
+    margin = kpis.get("financial", {}).get("gross_margin", 1.0)
+    threshold = BENCHMARKS["min_gross_margin"]
+    if margin < threshold:
+        rev = kpis.get("sales", {}).get("total_revenue", 0)
+        impact = (threshold - margin) * rev
+        return {
+            "rule": "pricing_problem",
+            "flag": "⚠️  PRICING / MARGIN PROBLEM",
+            "description": (f"Gross margin is {margin*100:.1f}%, "
+                            f"below the {threshold*100:.0f}% industry threshold."),
+            "current_value": margin,
+            "benchmark": threshold,
+            "impact_score": 7,
+            "estimated_revenue_impact": round(impact, 2),
+            "recommended_action": (
+                "Review pricing strategy. Identify high-cost low-margin products. "
+                "Consider value-based pricing and bundle premium offerings."
+            )
+        }
+    return None
+
+
+def rule_low_roas(kpis: dict) -> dict | None:
+    """Rule 5: ROAS below 2x flags ad spend waste."""
+    roas = kpis.get("marketing", {}).get("return_on_ad_spend", 10.0)
+    threshold = BENCHMARKS["min_roas"]
+    if roas < threshold:
+        spend = kpis.get("marketing", {}).get("total_marketing_spend", 0)
+        return {
+            "rule": "low_roas",
+            "flag": "⚠️  LOW ADVERTISING RETURN",
+            "description": f"ROAS is {roas:.1f}x, below the {threshold}x minimum benchmark.",
+            "current_value": roas,
+            "benchmark": threshold,
+            "impact_score": 7,
+            "estimated_revenue_impact": round((threshold - roas) * spend, 2),
+            "recommended_action": (
+                "Pause underperforming ad sets. Reallocate to top-performing campaigns. "
+                "A/B test creatives and tighten audience targeting."
+            )
+        }
+    return None
+
+
+def rule_long_sales_cycle(kpis: dict) -> dict | None:
+    """Rule 6: Sales cycle too long reduces pipeline velocity."""
+    cycle = kpis.get("sales", {}).get("sales_cycle_length_days", 0)
+    threshold = BENCHMARKS["max_sales_cycle_days"]
+    if cycle > threshold:
+        return {
+            "rule": "long_sales_cycle",
+            "flag": "⚠️  LONG SALES CYCLE",
+            "description": f"Average sales cycle is {cycle:.0f} days, above the {threshold}-day benchmark.",
+            "current_value": cycle,
+            "benchmark": threshold,
+            "impact_score": 5,
+            "estimated_revenue_impact": 0,
+            "recommended_action": (
+                "Introduce sales enablement tools. Streamline proposal approval process. "
+                "Define decision-maker outreach strategy to reduce deal stall time."
+            )
+        }
+    return None
+
+
+# ── Runner ────────────────────────────────────────────────────────────────────
+
+RULES = [
+    rule_sales_funnel_leak,
+    rule_marketing_inefficiency,
+    rule_customer_churn,
+    rule_pricing_problem,
+    rule_low_roas,
+    rule_long_sales_cycle,
+]
+
+
+def run_detection(kpis: dict = None) -> dict:
+    """Execute all detection rules and output a revenue leak report."""
+    print("\n🚨 Running Revenue Leak Detection...")
+
+    if kpis is None:
+        kpi_path = "audit_workspace/analysis/kpi_results.json"
+        if os.path.isfile(kpi_path):
+            with open(kpi_path) as f:
+                kpis = json.load(f)
+        else:
+            print("   ⚠️  KPI results not found. Run kpi_library.py first.")
+            return {}
+
+    leaks = []
+    for rule_fn in RULES:
+        result = rule_fn(kpis)
+        if result:
+            result["detected_at"] = datetime.now().isoformat()
+            leaks.append(result)
+            print(f"   {result['flag']} (Impact Score: {result['impact_score']}/10)")
+
+    if not leaks:
+        print("   ✅ No revenue leaks detected — business metrics are within benchmarks!")
+
+    total_impact = sum(l.get("estimated_revenue_impact", 0) for l in leaks)
+
+    report = {
+        "generated_at": datetime.now().isoformat(),
+        "total_leaks_detected": len(leaks),
+        "total_estimated_revenue_impact": round(total_impact, 2),
+        "leaks": sorted(leaks, key=lambda x: x["impact_score"], reverse=True),
+        "benchmarks_used": BENCHMARKS,
+    }
+
+    os.makedirs("audit_workspace/analysis", exist_ok=True)
+    with open(OUTPUT_PATH, "w") as f:
+        json.dump(report, f, indent=2)
+
+    print(f"   📋 {len(leaks)} leaks detected | Est. impact: ₹{total_impact:,.0f}")
+    print(f"   ✅ Leak report saved to {OUTPUT_PATH}")
+
+    return report
+
+
+if __name__ == "__main__":
+    run_detection()
+
+
+===== FILE: ./run_full_audit.py =====
+
+"""
+run_full_audit.py
+=================
+Monarch Analytics — Master Pipeline Orchestrator
+
+Executes the complete end-to-end audit pipeline:
+  1. Validate client data
+  2. Setup workspace
+  3. Clean data
+  4. Run analysis scripts
+  5. Calculate KPIs
+  6. Detect revenue leaks
+  7. Generate visualizations
+  8. Generate PowerPoint report
+  9. Print audit checklist
+
+Usage:
+  python run_full_audit.py
+"""
+
+import sys
+import os
+import time
+from datetime import datetime
+
+# Add project root to path so all modules are importable
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+SEPARATOR = "=" * 60
+
+
+def section(title):
+    print(f"\n{SEPARATOR}")
+    print(f"  {title}")
+    print(f"{SEPARATOR}")
+
+
+def step(msg):
+    print(f"\n▶  {msg}")
+
+
+def done(msg=""):
+    print(f"   ✅ {msg}" if msg else "   ✅ Done")
+
+
+def run():
+    start_time = time.time()
+
+    print(f"\n{'='*60}")
+    print("  MONARCH ANALYTICS — FULL AUDIT PIPELINE")
+    print(f"  Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{'='*60}")
+
+    # ── Step 1: Validate Client Data ─────────────────────────────────────────
+    section("STEP 1/9 — Validating Client Data")
+    from validate_client_data import validate_all
+    validation = validate_all()
+    if not validation.get("overall_passed"):
+        print("\n❌ Data validation failed. Please fix errors before proceeding.")
+        print("   Check: audit_workspace/validation_report.json")
+        sys.exit(1)
+    done("Data validation passed")
+
+    # ── Step 2: Setup Workspace ───────────────────────────────────────────────
+    section("STEP 2/9 — Setting Up Workspace")
+    from setup_workspace import setup
+    setup()
+    done("Workspace ready")
+
+    # ── Step 3: Clean Data ────────────────────────────────────────────────────
+    section("STEP 3/9 — Cleaning Datasets")
+    from data_cleaning import run_cleaning
+    run_cleaning()
+    done("All datasets cleaned")
+
+    # ── Step 4: Run Analysis Scripts ──────────────────────────────────────────
+    section("STEP 4/9 — Running Analysis Scripts")
+
+    step("Sales Analysis...")
+    sys.path.insert(0, "analysis")
+    from analysis.sales_analysis import run as run_sales
+    sales_metrics = run_sales()
+
+    step("Marketing Analysis...")
+    from analysis.marketing_analysis import run as run_marketing
+    mkt_metrics = run_marketing()
+
+    step("Customer Analysis...")
+    from analysis.customer_analysis import run as run_customers
+    cust_metrics = run_customers()
+
+    step("Revenue Driver Analysis...")
+    from analysis.revenue_driver_analysis import run as run_drivers
+    driver_metrics = run_drivers()
+
+    done("All analysis scripts complete")
+
+    # ── Step 5: Calculate KPIs ────────────────────────────────────────────────
+    section("STEP 5/9 — Calculating KPIs")
+    from kpi_library import calculate_all_kpis
+    kpis = calculate_all_kpis()
+    done("KPI calculations complete")
+
+    # ── Step 6: Revenue Leak Detection ───────────────────────────────────────
+    section("STEP 6/9 — Detecting Revenue Leaks")
+    from revenue_leak_detector import run_detection
+    leaks = run_detection(kpis)
+    done(f"{leaks.get('total_leaks_detected', 0)} revenue leaks detected")
+
+    # ── Step 7: Update Workflow ────────────────────────────────────────────────
+    section("STEP 7/9 — Updating Audit Checklist")
+    from audit_workflow import load_status, save_status, auto_complete_pipeline_tasks, print_status
+    auto_complete_pipeline_tasks()
+    print_status()
+    done("Checklist updated")
+
+    # ── Step 8: Generate PowerPoint Report ───────────────────────────────────
+    section("STEP 8/9 — Generating PowerPoint Report")
+    from generate_report import generate_report
+    report_path = generate_report(kpis=kpis, leaks=leaks, drivers=driver_metrics)
+    done(f"Report saved: {report_path}")
+
+    # ── Step 9: Summary ───────────────────────────────────────────────────────
+    elapsed = round(time.time() - start_time, 1)
+
+    section("STEP 9/9 — AUDIT COMPLETE")
+    s = kpis.get("sales", {})
+    m = kpis.get("marketing", {})
+    c = kpis.get("customer", {})
+
+    print(f"""
+  📊 AUDIT SUMMARY
+  ─────────────────────────────────────────────────────
+  Total Revenue Analyzed:    ₹{s.get('total_revenue', 0):>12,.0f}
+  Lead-to-Sale Conversion:   {s.get('lead_conversion_rate', 0)*100:>10.1f}%
+  Average Deal Value:        ₹{s.get('average_deal_value', 0):>12,.0f}
+  ROAS:                      {m.get('return_on_ad_spend', 0):>12.1f}x
+  CAC:                       ₹{m.get('customer_acquisition_cost', 0):>12,.0f}
+  Customer LTV:              ₹{c.get('customer_lifetime_value', 0):>12,.0f}
+  Retention Rate:            {c.get('retention_rate', 0)*100:>10.1f}%
+  Revenue Leaks Detected:    {leaks.get('total_leaks_detected', 0):>12}
+  Revenue at Risk:           ₹{leaks.get('total_estimated_revenue_impact', 0):>12,.0f}
+  ─────────────────────────────────────────────────────
+
+  📁 OUTPUT FILES
+  ─────────────────────────────────────────────────────
+  Cleaned Data:     audit_workspace/cleaned_data/
+  Charts:           audit_workspace/visualizations/
+  KPI Results:      audit_workspace/analysis/kpi_results.json
+  Leak Report:      audit_workspace/analysis/revenue_leak_report.json
+  Audit Report:     {report_path}
+  ─────────────────────────────────────────────────────
+
+  ⏱️  Pipeline completed in {elapsed}s
+
+  🚀 To launch interactive dashboard:
+     python dashboard_app.py
+     → http://localhost:8050
+{SEPARATOR}
+""")
+
+
+if __name__ == "__main__":
+    run()
+
+
+===== FILE: ./setup_workspace.py =====
+
+"""
+setup_workspace.py
+==================
+Monarch Analytics — Workspace Setup Script
+
+Creates the full audit workspace directory structure,
+copies uploaded client data into the workspace, and
+initializes the SQLite audit database.
+"""
+
+import os
+import shutil
+import sqlite3
+from datetime import datetime
+
+# ── Directory Structure ───────────────────────────────────────────────────────
+
+WORKSPACE_DIRS = [
+    "audit_workspace/data",
+    "audit_workspace/cleaned_data",
+    "audit_workspace/analysis",
+    "audit_workspace/visualizations",
+    "audit_workspace/report_outputs",
+    "audit_workspace/dashboards",
+]
+
+SOURCE_DATA_DIR = "client_data_intake"
+DB_PATH = "audit_workspace/monarch_audit.db"
+
+
+def create_directories():
+    """Create all required workspace folders."""
+    print("📁 Creating workspace directories...")
+    for d in WORKSPACE_DIRS:
+        os.makedirs(d, exist_ok=True)
+        print(f"   ✅ {d}")
+
+
+def copy_client_data():
+    """Copy client CSV files from intake folder into workspace/data/."""
+    print("\n📂 Copying client data into workspace...")
+    if not os.path.isdir(SOURCE_DATA_DIR):
+        print(f"   ⚠️  Source directory '{SOURCE_DATA_DIR}' not found. Skipping copy.")
+        return
+    count = 0
+    for fname in os.listdir(SOURCE_DATA_DIR):
+        if fname.endswith(".csv"):
+            src = os.path.join(SOURCE_DATA_DIR, fname)
+            dst = os.path.join("audit_workspace/data", fname)
+            shutil.copy2(src, dst)
+            print(f"   ✅ Copied: {fname}")
+            count += 1
+    print(f"   Total files copied: {count}")
+
+
+def init_database():
+    """Initialize SQLite database with audit tracking tables."""
+    print(f"\n🗄️  Initializing SQLite database: {DB_PATH}")
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # Audit sessions table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_name TEXT,
+            started_at TEXT,
+            status TEXT DEFAULT 'in_progress',
+            completed_at TEXT
+        )
+    """)
+
+    # KPI results table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS kpi_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER,
+            kpi_name TEXT,
+            kpi_value REAL,
+            category TEXT,
+            recorded_at TEXT,
+            FOREIGN KEY(session_id) REFERENCES audit_sessions(id)
+        )
+    """)
+
+    # Revenue leaks table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS revenue_leaks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER,
+            rule_name TEXT,
+            description TEXT,
+            impact_score REAL,
+            recommended_action TEXT,
+            detected_at TEXT,
+            FOREIGN KEY(session_id) REFERENCES audit_sessions(id)
+        )
+    """)
+
+    # Audit workflow steps table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER,
+            step_name TEXT,
+            status TEXT DEFAULT 'pending',
+            completed_at TEXT,
+            FOREIGN KEY(session_id) REFERENCES audit_sessions(id)
+        )
+    """)
+
+    # Insert a new audit session
+    cur.execute("""
+        INSERT INTO audit_sessions (client_name, started_at, status)
+        VALUES (?, ?, ?)
+    """, ("Demo Client", datetime.now().isoformat(), "in_progress"))
+
+    conn.commit()
+    session_id = cur.lastrowid
+    conn.close()
+
+    print(f"   ✅ Database initialized. Session ID: {session_id}")
+    return session_id
+
+
+def setup():
+    """Run the full workspace setup."""
+    print("\n" + "="*60)
+    print("  MONARCH ANALYTICS — WORKSPACE SETUP")
+    print("="*60 + "\n")
+
+    create_directories()
+    copy_client_data()
+    session_id = init_database()
+
+    print("\n" + "="*60)
+    print("  ✅ WORKSPACE READY")
+    print(f"  Session ID: {session_id}")
+    print("="*60 + "\n")
+
+    return session_id
+
+
+if __name__ == "__main__":
+    setup()
+
+
+===== FILE: ./validate_client_data.py =====
+
+"""
+validate_client_data.py
+=======================
+Monarch Analytics — Data Validation Script
+
+Validates all uploaded client CSV files before the audit pipeline begins.
+Checks for: file existence, column structure, missing values, date formats.
+Outputs a structured validation report.
+"""
+
+import os
+import pandas as pd
+import json
+from datetime import datetime
+
+# ── Configuration ────────────────────────────────────────────────────────────
+
+DATA_DIR = "client_data_intake"
+
+REQUIRED_FILES = {
+    "01_sales_data_template.csv": [
+        "date", "customer_id", "product_id", "revenue", "channel",
+        "sales_rep", "deal_stage", "lead_source", "lead_date", "close_date"
+    ],
+    "02_marketing_spend_template.csv": [
+        "date", "channel", "campaign", "spend", "impressions",
+        "clicks", "conversions", "revenue_generated"
+    ],
+    "03_customer_data_template.csv": [
+        "customer_id", "first_purchase_date", "last_purchase_date",
+        "total_orders", "total_revenue", "segment", "location"
+    ],
+    "04_product_catalog_template.csv": [
+        "product_id", "product_name", "category", "price", "cost", "margin"
+    ],
+    "05_operational_metrics_template.csv": [
+        "date", "department", "metric_name", "metric_value"
+    ],
+}
+
+DATE_COLUMNS = {
+    "01_sales_data_template.csv": ["date", "lead_date", "close_date"],
+    "02_marketing_spend_template.csv": ["date"],
+    "03_customer_data_template.csv": ["first_purchase_date", "last_purchase_date"],
+    "05_operational_metrics_template.csv": ["date"],
+}
+
+NUMERIC_COLUMNS = {
+    "01_sales_data_template.csv": ["revenue"],
+    "02_marketing_spend_template.csv": ["spend", "impressions", "clicks", "conversions", "revenue_generated"],
+    "03_customer_data_template.csv": ["total_orders", "total_revenue"],
+    "04_product_catalog_template.csv": ["price", "cost", "margin"],
+    "05_operational_metrics_template.csv": ["metric_value"],
+}
+
+
+# ── Validation Functions ──────────────────────────────────────────────────────
+
+def check_file_exists(filename: str) -> dict:
+    """Check whether a required file exists in the data directory."""
+    path = os.path.join(DATA_DIR, filename)
+    exists = os.path.isfile(path)
+    return {"check": "file_exists", "passed": exists,
+            "detail": f"{'Found' if exists else 'MISSING'}: {path}"}
+
+
+def check_columns(df: pd.DataFrame, filename: str, required_cols: list) -> dict:
+    """Verify all required columns are present in the dataframe."""
+    actual_cols = set(df.columns.str.strip().str.lower())
+    required_set = set(required_cols)
+    missing = required_set - actual_cols
+    extra = actual_cols - required_set
+    passed = len(missing) == 0
+    detail = []
+    if missing:
+        detail.append(f"Missing columns: {sorted(missing)}")
+    if extra:
+        detail.append(f"Extra columns (ignored): {sorted(extra)}")
+    if passed:
+        detail.append("All required columns present.")
+    return {"check": "column_structure", "passed": passed, "detail": " | ".join(detail)}
+
+
+def check_missing_values(df: pd.DataFrame, required_cols: list) -> dict:
+    """Report missing values across required columns."""
+    issues = {}
+    for col in required_cols:
+        if col in df.columns:
+            missing_count = df[col].isnull().sum()
+            if missing_count > 0:
+                issues[col] = int(missing_count)
+    passed = len(issues) == 0
+    detail = f"Missing values found: {issues}" if issues else "No critical missing values."
+    return {"check": "missing_values", "passed": passed, "detail": detail, "missing_counts": issues}
+
+
+def check_date_format(df: pd.DataFrame, date_cols: list) -> dict:
+    """Validate that date columns follow YYYY-MM-DD format."""
+    issues = {}
+    for col in date_cols:
+        if col not in df.columns:
+            continue
+        # Drop NaN before checking (optional fields may be blank)
+        non_null = df[col].dropna()
+        bad_rows = []
+        for idx, val in non_null.items():
+            try:
+                datetime.strptime(str(val).strip(), "%Y-%m-%d")
+            except ValueError:
+                bad_rows.append({"row": int(idx) + 2, "value": str(val)})
+        if bad_rows:
+            issues[col] = bad_rows[:5]  # show first 5 bad rows only
+    passed = len(issues) == 0
+    detail = f"Date format issues: {issues}" if issues else "All dates are YYYY-MM-DD."
+    return {"check": "date_format", "passed": passed, "detail": detail}
+
+
+def check_numeric_columns(df: pd.DataFrame, numeric_cols: list) -> dict:
+    """Validate that numeric columns contain valid numbers."""
+    issues = {}
+    for col in numeric_cols:
+        if col not in df.columns:
+            continue
+        converted = pd.to_numeric(df[col], errors="coerce")
+        bad_count = converted.isnull().sum() - df[col].isnull().sum()
+        if bad_count > 0:
+            issues[col] = int(bad_count)
+    passed = len(issues) == 0
+    detail = f"Non-numeric values in: {issues}" if issues else "All numeric columns are valid."
+    return {"check": "numeric_columns", "passed": passed, "detail": detail}
+
+
+# ── Main Validation Runner ────────────────────────────────────────────────────
+
+def validate_all() -> dict:
+    """Run all validation checks on every required file and produce a report."""
+    report = {
+        "audit_id": f"VAL-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+        "validated_at": datetime.now().isoformat(),
+        "overall_passed": True,
+        "files": {}
+    }
+
+    print("\n" + "="*60)
+    print("  MONARCH ANALYTICS — DATA VALIDATION")
+    print("="*60)
+
+    for filename, required_cols in REQUIRED_FILES.items():
+        print(f"\n📄 Validating: {filename}")
+        file_report = {"checks": [], "row_count": 0, "passed": True}
+
+        # 1. File existence
+        exists_check = check_file_exists(filename)
+        file_report["checks"].append(exists_check)
+        status = "✅" if exists_check["passed"] else "❌"
+        print(f"  {status} File exists: {exists_check['detail']}")
+
+        if not exists_check["passed"]:
+            file_report["passed"] = False
+            report["overall_passed"] = False
+            report["files"][filename] = file_report
+            continue
+
+        # Load file
+        path = os.path.join(DATA_DIR, filename)
+        df = pd.read_csv(path)
+        df.columns = df.columns.str.strip().str.lower()
+        file_report["row_count"] = len(df)
+        print(f"  📊 Rows loaded: {len(df)}")
+
+        # 2. Column check
+        col_check = check_columns(df, filename, required_cols)
+        file_report["checks"].append(col_check)
+        status = "✅" if col_check["passed"] else "❌"
+        print(f"  {status} Columns: {col_check['detail']}")
+        if not col_check["passed"]:
+            file_report["passed"] = False
+            report["overall_passed"] = False
+
+        # 3. Missing values
+        mv_check = check_missing_values(df, required_cols)
+        file_report["checks"].append(mv_check)
+        status = "✅" if mv_check["passed"] else "⚠️ "
+        print(f"  {status} Missing values: {mv_check['detail']}")
+
+        # 4. Date format
+        if filename in DATE_COLUMNS:
+            date_check = check_date_format(df, DATE_COLUMNS[filename])
+            file_report["checks"].append(date_check)
+            status = "✅" if date_check["passed"] else "❌"
+            print(f"  {status} Date format: {date_check['detail']}")
+            if not date_check["passed"]:
+                file_report["passed"] = False
+                report["overall_passed"] = False
+
+        # 5. Numeric columns
+        if filename in NUMERIC_COLUMNS:
+            num_check = check_numeric_columns(df, NUMERIC_COLUMNS[filename])
+            file_report["checks"].append(num_check)
+            status = "✅" if num_check["passed"] else "❌"
+            print(f"  {status} Numeric cols: {num_check['detail']}")
+            if not num_check["passed"]:
+                file_report["passed"] = False
+                report["overall_passed"] = False
+
+        report["files"][filename] = file_report
+
+    # Summary
+    print("\n" + "="*60)
+    overall = "✅ ALL CHECKS PASSED" if report["overall_passed"] else "❌ VALIDATION FAILED — FIX ERRORS BEFORE PROCEEDING"
+    print(f"  RESULT: {overall}")
+    print("="*60 + "\n")
+
+    # Save report
+    report_path = "audit_workspace/validation_report.json"
+    os.makedirs("audit_workspace", exist_ok=True)
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"📁 Validation report saved to: {report_path}\n")
+
+    return report
+
+
+if __name__ == "__main__":
+    validate_all()

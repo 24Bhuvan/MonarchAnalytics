@@ -1,0 +1,81 @@
+========================================================
+  MONARCH ANALYTICS — CLIENT DATA INTAKE INSTRUCTIONS
+========================================================
+
+Thank you for working with Monarch Analytics.
+Please follow these instructions carefully to ensure a smooth audit process.
+
+--------------------------------------------------------
+REQUIRED FILES
+--------------------------------------------------------
+You must submit ALL five CSV files listed below:
+
+  01_sales_data_template.csv
+  02_marketing_spend_template.csv
+  03_customer_data_template.csv
+  04_product_catalog_template.csv
+  05_operational_metrics_template.csv
+
+Do NOT rename these files. Do NOT add or remove columns.
+
+--------------------------------------------------------
+FORMAT RULES
+--------------------------------------------------------
+1. DATE FORMAT
+   All dates must be in YYYY-MM-DD format.
+   Example: 2024-03-15  (NOT 15/03/2024 or March 15 2024)
+
+2. NUMERIC VALUES
+   Revenue, spend, and metric values must be plain numbers.
+   Do NOT include currency symbols (₹, $, €) or commas.
+   Correct:   15000
+   Incorrect: ₹15,000
+
+3. NO MISSING COLUMN NAMES
+   Every column header must be present, even if some rows
+   have missing values. Do not delete columns.
+
+4. EMPTY VALUES
+   Use blank cells for missing data — do NOT write "N/A",
+   "null", "none", or "0" unless 0 is the real value.
+
+5. TEXT FIELDS
+   Use lowercase_with_underscores for category values.
+   Example: google_ads, closed_won, enterprise
+
+6. FILE FORMAT
+   Save all files as .csv (UTF-8 encoding).
+   Do NOT submit .xlsx, .xls, or .ods files.
+
+--------------------------------------------------------
+FILE SIZE EXPECTATIONS
+--------------------------------------------------------
+  sales_data:          50–10,000 rows
+  marketing_spend:     10–500 rows
+  customer_data:       50–50,000 rows
+  product_catalog:     5–500 rows
+  operational_metrics: 20–2,000 rows
+
+If your data is larger than these ranges, contact us first.
+
+--------------------------------------------------------
+HOW TO UPLOAD YOUR DATA
+--------------------------------------------------------
+Step 1: Fill each template CSV with your actual data.
+Step 2: Keep all column names exactly as provided.
+Step 3: Send all 5 files in a single zipped folder named:
+         [YourCompanyName]_audit_data.zip
+Step 4: Email to: data@monarchanalytics.in
+         OR upload via the secure portal link provided.
+
+--------------------------------------------------------
+AFTER SUBMISSION
+--------------------------------------------------------
+Our system will automatically validate your data within
+2 business hours. You will receive a validation report
+confirming whether data was accepted or if corrections
+are needed.
+
+Questions? Contact: support@monarchanalytics.in
+
+========================================================

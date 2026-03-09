@@ -1,0 +1,27 @@
+{
+  "generated_at": "2026-03-08T12:09:28.518984",
+  "total_leaks_detected": 1,
+  "total_estimated_revenue_impact": 1221919.95,
+  "leaks": [
+    {
+      "rule": "customer_churn_issue",
+      "flag": "\u26a0\ufe0f  CUSTOMER CHURN ISSUE",
+      "description": "Retention rate is 0.0%, below the 40% threshold. 15 customers have churned.",
+      "current_value": 0.0,
+      "benchmark": 0.4,
+      "impact_score": 9,
+      "estimated_revenue_impact": 1221919.95,
+      "recommended_action": "Implement customer success program. Add 30/60/90 day check-ins. Launch loyalty program and monitor NPS. Identify churn triggers in exit interviews.",
+      "detected_at": "2026-03-08T12:09:28.518950"
+    }
+  ],
+  "benchmarks_used": {
+    "conversion_rate": 0.15,
+    "ltv_to_cac_max_ratio": 0.4,
+    "min_retention_rate": 0.4,
+    "min_gross_margin": 0.5,
+    "min_roas": 2.0,
+    "max_sales_cycle_days": 45,
+    "min_repeat_purchase_rate": 0.3
+  }
+}

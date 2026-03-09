@@ -1,0 +1,11 @@
+metric,value,unit
+Total Leads,15,count
+Proposals Sent,15,count
+Deals Won,11,count
+Lead to Opportunity Conversion,100.0%,rate
+Opportunity to Sale Conversion,73.3%,rate
+Overall Lead to Sale Conversion,73.3%,rate
+Average Deal Value,"₹14,000",currency
+Average Sales Cycle,12.9 days,days
+Pipeline Velocity,"₹11,930/day",currency/day
+Total Revenue,"₹154,000",currency

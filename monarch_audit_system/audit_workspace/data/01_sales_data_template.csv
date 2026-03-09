@@ -1,0 +1,16 @@
+date,customer_id,product_id,revenue,channel,sales_rep,deal_stage,lead_source,lead_date,close_date
+2024-01-15,CUST001,PROD001,15000,online,John Smith,closed_won,google_ads,2024-01-01,2024-01-15
+2024-01-18,CUST002,PROD002,8500,referral,Jane Doe,closed_won,referral,2024-01-05,2024-01-18
+2024-01-20,CUST003,PROD001,22000,direct,John Smith,closed_lost,cold_outreach,2024-01-08,2024-01-20
+2024-01-22,CUST004,PROD003,5000,social_media,Bob Kumar,proposal,linkedin,2024-01-12,
+2024-02-01,CUST005,PROD002,12000,online,Jane Doe,closed_won,google_ads,2024-01-18,2024-02-01
+2024-02-05,CUST006,PROD001,18000,direct,John Smith,closed_won,cold_outreach,2024-01-22,2024-02-05
+2024-02-10,CUST007,PROD003,9500,referral,Bob Kumar,closed_won,referral,2024-01-28,2024-02-10
+2024-02-14,CUST008,PROD002,6500,social_media,Jane Doe,closed_lost,linkedin,2024-02-01,2024-02-14
+2024-02-20,CUST009,PROD001,25000,online,John Smith,closed_won,google_ads,2024-02-05,2024-02-20
+2024-03-01,CUST010,PROD003,11000,direct,Bob Kumar,closed_won,cold_outreach,2024-02-15,2024-03-01
+2024-03-05,CUST001,PROD002,7000,online,Jane Doe,closed_won,repeat,2024-02-25,2024-03-05
+2024-03-10,CUST011,PROD001,19000,referral,John Smith,closed_won,referral,2024-02-28,2024-03-10
+2024-03-15,CUST012,PROD003,4500,social_media,Bob Kumar,proposal,linkedin,2024-03-05,
+2024-03-20,CUST013,PROD002,13000,direct,Jane Doe,closed_won,cold_outreach,2024-03-08,2024-03-20
+2024-04-01,CUST005,PROD001,16000,online,John Smith,closed_won,repeat,2024-03-20,2024-04-01
